@@ -284,6 +284,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .btn:hover { background: #E7E4DD; }
 .btn:active { transform: translateY(1px); }
 .btn[disabled] { opacity: .45; cursor: not-allowed; }
+/* .btn 의 display 가 UA 의 [hidden]{display:none} 을 이겨서 el.hidden 이 먹지 않는다 */
+.btn[hidden] { display: none; }
 
 .btn-ember { background: var(--ember); color: #fff; }
 .btn-ember:hover { background: var(--ember-dim); }
@@ -825,4 +827,366 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 @media (prefers-reduced-motion: reduce) {
 	* { transition-duration: .001s !important; animation-duration: .001s !important; }
+}
+
+/* ---------------------------------------------------------
+   1인 1링크 초대 입장 (vote/room 초대 모드, vote/invite_invalid)
+   --------------------------------------------------------- */
+
+/* 이름 입력 대신 "OO님으로 투표합니다" — 확정된 신원을 보여주는 칸 */
+.whoami {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 3px 8px;
+	margin: 0 0 18px;
+	padding: 13px 16px;
+	border-left: 3px solid var(--soju);
+	border-radius: 0 var(--r) var(--r) 0;
+	background: rgba(46, 139, 107, .07);
+	color: var(--char-soft);
+	font-size: 15px;
+}
+
+.whoami b { font-size: 17px; font-weight: 800; letter-spacing: -.02em; color: var(--char); }
+
+/* 이름을 바꿀 수 없다는 안내는 조용히 — 한 줄 아래 흐린 글씨 */
+.whoami .whoami-note { flex: 1 1 100%; font-size: 12.5px; color: var(--muted-2); }
+
+/* 아직 투표하지 않은 사람. 총무가 가장 먼저 보는 정보라 집계 위에 둔다 */
+.pending-note {
+	margin: 0 0 16px;
+	font-size: 14px;
+	color: var(--char-soft);
+	line-height: 1.6;
+}
+
+.pending-note .pending-label {
+	display: inline-block;
+	margin-right: 7px;
+	padding: 2px 8px;
+	border-radius: var(--r-sm);
+	background: var(--ember);
+	color: #fff;
+	font-size: 11.5px;
+	font-weight: 800;
+	vertical-align: 1px;
+}
+
+.pending-note.pending-done { color: var(--soju); font-weight: 700; }
+
+/* 초대만 되고 아직 투표하지 않은 참여자 칩 */
+.voters li.novote {
+	/* border 를 주면 칩 크기가 2px 달라져 줄이 흔들린다 — 안쪽 그림자로 테두리만 그린다 */
+	background: transparent;
+	box-shadow: inset 0 0 0 1px var(--steel);
+	color: var(--muted-2);
+	font-weight: 500;
+}
+
+.notice-danger { border-left-color: var(--danger); background: rgba(194, 50, 31, .06); }
+
+/* ---------------------------------------------------------
+   초대 링크 목록 (vote/invites) + 참여 방식 선택 (vote/create)
+   링크 하나가 곧 한 사람의 투표 권한이라 한 줄에 한 사람씩
+   이름·상태·링크·복사 버튼을 나란히 둔다.
+   --------------------------------------------------------- */
+.invite-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--steel); }
+
+.invite {
+	display: grid;
+	grid-template-columns: 1fr minmax(0, 320px) auto;
+	gap: 8px 12px;
+	align-items: center;
+	padding: 12px 0;
+	border-bottom: 1px solid var(--steel);
+}
+
+.invite-who { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 8px; min-width: 0; }
+
+.invite-no { flex: none; width: 2.1em; font-size: 13px; font-weight: 700; color: var(--muted-2); }
+
+.invite-name { font-size: 16px; font-weight: 800; letter-spacing: -.02em; overflow-wrap: anywhere; }
+
+.invite-state { font-size: 12px; font-weight: 700; }
+.invite-state.done    { color: var(--soju-dim); }   /* --soju 는 흰 배경에서 4.2:1 로 모자란다 */
+.invite-state.pending { color: var(--muted-2); }
+
+.invite-url {
+	width: 100%;
+	min-width: 0;
+	background: var(--steel-2);
+	border: 1px solid var(--steel);
+	border-radius: var(--r);
+	padding: 7px 10px;
+	font-size: 13px;
+	color: var(--muted);
+}
+
+
+.copy-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+
+.invite-note { margin: 0 0 14px; font-size: 13px; line-height: 1.75; color: var(--muted-2); }
+.invite-note b { color: var(--muted); font-weight: 700; }
+
+.invite-steps { margin: 0 0 14px; padding-left: 20px; font-size: 14px; line-height: 1.8; color: var(--char-soft); }
+.invite-steps li { margin-bottom: 4px; }
+
+/* 라디오 묶음처럼 컨트롤 하나에 붙지 않는 캡션. .field label 과 같은 모양 */
+.field .fld-cap {
+	display: block;
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--muted);
+	margin-bottom: 6px;
+}
+
+.mode-pick { display: flex; flex-wrap: wrap; gap: 7px; }
+
+/* 명단 모드에서 참석 인원 칸이 사라지면 남은 칸이 폭을 다 쓴다 */
+.grid-2.solo { grid-template-columns: 1fr; }
+
+@media (max-width: 680px) {
+	/* 이름은 윗줄, 링크 + 복사 버튼은 아랫줄 한 쌍으로 */
+	.invite { grid-template-columns: 1fr auto; }
+	.invite-who  { grid-column: 1 / -1; grid-row: 1; }
+	.invite-url  { grid-column: 1; grid-row: 2; }
+	.invite-copy { grid-column: 2; grid-row: 2; }
+}
+
+/* =========================================================
+   관리자 — 전체 투표 현황
+   비밀번호 하나로 들어오는 내부 화면. 카드 그리드가 아니라
+   순위표·표 톤을 그대로 쓴다.
+   ========================================================= */
+
+/* .field 규칙에 password 타입이 빠져 있어 관리자 로그인 입력만 맨몸으로 나온다 */
+.field input[type="password"] {
+	width: 100%;
+	background: var(--surface);
+	border: 1.5px solid var(--steel);
+	border-radius: var(--r);
+	padding: 11px 13px;
+	font-size: 15px;
+}
+
+/* 화면 머리 */
+.adm-head {
+	display: flex;
+	align-items: flex-end;
+	justify-content: space-between;
+	gap: 14px 18px;
+	flex-wrap: wrap;
+	padding: 34px 0 18px;
+}
+
+.adm-head h1 {
+	margin: 0;
+	font-size: clamp(24px, 3.6vw, 32px);
+	font-weight: 900;
+	letter-spacing: -.035em;
+}
+
+.adm-head p { margin: 6px 0 0; color: var(--muted); font-size: 14px; }
+
+/* 어두운 밴드 위의 테두리 버튼 */
+.adm-on-dark { background: transparent; border-color: rgba(255, 255, 255, .32); color: #F2EDE6; }
+.adm-on-dark:hover { background: rgba(255, 255, 255, .12); }
+
+/* 요약 지표 띠 */
+.adm-sum {
+	display: flex;
+	flex-wrap: wrap;
+	margin: 0 0 26px;
+	padding: 0;
+	background: var(--surface);
+	border-top: 2px solid var(--char);
+	border-bottom: 1px solid var(--steel);
+}
+
+.adm-sum-cell {
+	flex: 1 1 210px;
+	min-width: 0;
+	padding: 15px 20px 16px;
+	border-left: 1px solid var(--steel);
+}
+
+.adm-sum-cell:first-child { border-left: 0; }
+
+.adm-sum dt { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.adm-sum dd { margin: 1px 0 0; }
+
+.adm-sum-big { font-size: 32px; font-weight: 900; letter-spacing: -.045em; line-height: 1.15; }
+
+.adm-sum-sub {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 2px 12px;
+	margin-top: 3px;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--muted-2);
+}
+
+.adm-sum-sub b { color: var(--char); font-weight: 800; }
+
+/* 필터 */
+.adm-filter {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+	margin: 0 0 14px;
+}
+
+.adm-filter select,
+.adm-filter input[type="search"] {
+	background: var(--surface);
+	border: 1.5px solid var(--steel);
+	border-radius: var(--r);
+	padding: 9px 12px;
+	font-size: 14.5px;
+	appearance: none;
+	-webkit-appearance: none;
+}
+
+.adm-filter input[type="search"] { flex: 1 1 240px; min-width: 0; }
+.adm-filter select:focus, .adm-filter input:focus { border-color: var(--char); outline: none; }
+.adm-count { margin-left: auto; font-size: 13.5px; font-weight: 600; color: var(--muted); }
+
+/* 표 — 좁은 화면에서는 이 안에서만 가로 스크롤한다 */
+.adm-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+.adm-table {
+	width: 100%;
+	min-width: 1040px;
+	border-collapse: collapse;
+	font-size: 14px;
+}
+
+.adm-table-tight { min-width: 520px; }
+
+.adm-table th {
+	text-align: left;
+	padding: 10px 12px;
+	font-size: 12.5px;
+	font-weight: 700;
+	color: var(--muted);
+	white-space: nowrap;
+	background: transparent;
+	border-top: 2px solid var(--char);
+	border-bottom: 1px solid var(--steel);
+}
+
+.adm-table td {
+	padding: 13px 12px;
+	border-bottom: 1px solid var(--steel);
+	vertical-align: middle;
+}
+
+.adm-table tbody tr:hover { background: rgba(255, 90, 31, .035); }
+.adm-nowrap { white-space: nowrap; }
+
+.adm-code {
+	font-size: 13.5px;
+	font-weight: 900;
+	letter-spacing: .1em;
+	font-variant-numeric: tabular-nums;
+	text-decoration: none;
+}
+
+.adm-code:hover { color: var(--ember); }
+
+.adm-title { font-size: 15px; font-weight: 800; letter-spacing: -.02em; text-decoration: none; }
+.adm-title:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+.adm-sub { font-size: 12.5px; color: var(--muted-2); }
+.adm-over { font-size: 12px; font-weight: 800; color: var(--danger); }
+
+/* 상태 배지 */
+.adm-st {
+	display: inline-block;
+	padding: 3px 8px;
+	border-radius: var(--r-sm);
+	font-size: 12px;
+	font-weight: 800;
+	white-space: nowrap;
+}
+
+.adm-st-open   { background: var(--soju-dim); color: #fff; }
+.adm-st-closed { background: var(--steel-2); color: var(--muted); }
+.adm-st-pend   { background: rgba(194, 50, 31, .09); color: var(--danger); }
+
+/* 명단 모드 표시 — .tag 와 같이 쓴다 */
+.adm-tag-invite { color: var(--char); border-color: var(--ember); background: rgba(255, 90, 31, .08); }
+
+/* 참여율 */
+.adm-turn { min-width: 112px; }
+
+.adm-turn-top {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+	font-size: 13.5px;
+	font-weight: 700;
+}
+
+.adm-turn-top .pct { font-weight: 700; color: var(--muted); }
+
+.adm-bar {
+	display: block;   /* 표 칸 안의 span 이라 inline 이면 height 가 무시된다 */
+	height: 6px;
+	margin-top: 5px;
+	background: var(--steel-2);
+	border-radius: 999px;
+	overflow: hidden;
+}
+
+.adm-bar-fill {
+	display: block;   /* span 이라 inline 이면 width/height 가 무시된다 */
+	height: 100%;
+	width: 0;
+	background: var(--char);
+	border-radius: 999px;
+}
+
+.adm-bar-fill.full { background: var(--ember); }
+
+.adm-lead { font-weight: 800; letter-spacing: -.02em; }
+
+/* 미투표자 — 관리자가 가장 먼저 보는 블록 */
+.adm-pend {
+	border: 2px solid var(--danger);
+	border-radius: var(--r-lg);
+	background: rgba(194, 50, 31, .045);
+	padding: 20px 22px;
+	margin-bottom: 16px;
+}
+
+.adm-pend h2 {
+	margin: 0 0 10px;
+	font-size: 17px;
+	font-weight: 800;
+	letter-spacing: -.025em;
+	color: var(--danger);
+}
+
+.adm-pend p { margin: 10px 0 0; font-size: 13.5px; color: var(--muted); }
+.adm-pend .voters li { background: var(--surface); border: 1px solid rgba(194, 50, 31, .35); font-weight: 700; }
+
+.adm-pend-done { border-color: var(--soju); background: rgba(46, 139, 107, .06); }
+.adm-pend-done h2 { color: var(--soju-dim); }
+
+.adm-pend-open { border-color: var(--steel); background: var(--surface); }
+.adm-pend-open h2 { color: var(--char); }
+
+.adm-note { margin: 0 0 12px; font-size: 13px; color: var(--muted-2); }
+
+@media (max-width: 680px) {
+	.adm-sum-cell { flex-basis: 100%; border-left: 0; border-top: 1px solid var(--steel); }
+	.adm-sum-cell:first-child { border-top: 0; }
+	.adm-sum-big { font-size: 26px; }
+	.adm-count { margin-left: 0; }
+	.adm-pend { padding: 16px 16px; border-radius: var(--r); }
 }

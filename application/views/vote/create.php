@@ -57,8 +57,37 @@
 					       placeholder="예: 김대리" required>
 				</div>
 
-				<div class="grid-2">
-					<div class="field">
+				<div class="field">
+					<span class="fld-cap" id="v-mode-cap">참여 방식</span>
+					<div class="mode-pick" role="radiogroup" aria-labelledby="v-mode-cap">
+						<label class="chip">
+							<input type="radio" name="join_mode" value="open" checked> 누구나 링크로 참여
+						</label>
+						<label class="chip">
+							<input type="radio" name="join_mode" value="invite"> 명단으로 1인 1링크
+						</label>
+					</div>
+					<p class="invite-note" id="v-mode-hint" style="margin:8px 0 0">
+						링크 하나를 단체방에 뿌립니다. 참여자가 이름을 직접 적습니다.
+					</p>
+				</div>
+
+				<div class="field" id="v-roster-field" hidden>
+					<label for="v-roster">참석자 명단</label>
+					<textarea id="v-roster" name="roster" rows="6"
+					          placeholder="한 줄에 한 명, 또는 콤마로 구분&#10;김대리&#10;박사원&#10;이과장&#10;&#10;또는: 김대리, 박사원, 이과장"></textarea>
+					<p class="invite-note" id="v-roster-count" style="margin:8px 0 0" role="status" aria-live="polite">
+						아직 아무도 없습니다.
+					</p>
+					<p class="invite-note" style="margin:0">
+						명단에 오른 사람 수가 곧 참석 인원입니다(최대 100명).
+						동명이인은 <b>박사원A</b>, <b>박사원B</b> 처럼 구분해 주세요.
+						만들면 <b>사람별 초대 링크 목록</b>이 나오고, 거기서 각자에게 하나씩 보냅니다.
+					</p>
+				</div>
+
+				<div class="grid-2" id="v-count-row">
+					<div class="field" id="v-head-field">
 						<label for="v-head">참석 인원</label>
 						<input type="number" id="v-head" name="headcount" min="0" max="300" value="0">
 						<p class="hint">0이면 표시하지 않습니다</p>

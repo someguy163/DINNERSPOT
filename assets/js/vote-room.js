@@ -1,6 +1,11 @@
 /* =========================================================
    DINNERSPOT - 투표방
    투표 제출 + 결과 폴링 (방을 보고 있는 동안만)
+
+   두 가지 입장 방식을 함께 다룬다.
+     open   : /vote/r/{code}  — 이름을 직접 적고, voter_key 를 localStorage 에 둔다.
+     invite : /vote/i/{token} — 토큰이 사람을 지목한다. 이름을 보내지 않고
+              voter_key 도 저장하지 않는다 (식별자가 URL 에 있다).
    ========================================================= */
 (function () {
 	'use strict';
@@ -10,11 +15,20 @@
 
 	if (!R) { return; }
 
-	var voterKey = DS.store.get('ds_voter_' + R.code) || '';
+	/* ---------- 입장 방식 ---------- */
+	var invite = (R.invite && R.invite.token) ? R.invite : null;
+	var isInvite = !!invite;
+
+	// 초대 모드는 토큰이 곧 신원이므로 localStorage 를 건드리지 않는다.
+	var voterKey = isInvite ? '' : (DS.store.get('ds_voter_' + R.code) || '');
 	var hostKey = DS.store.get('ds_host_' + R.code) || '';
 
+	var apiRoom = isInvite
+		? 'api/vote/i/' + encodeURIComponent(invite.token)
+		: 'api/vote/' + encodeURIComponent(R.code);
+
 	var form = document.getElementById('ballot-form');
-	var nickEl = document.getElementById('b-nick');
+	var nickEl = document.getElementById('b-nick');        // 초대 모드에는 없다
 	var commentEl = document.getElementById('b-comment');
 	var btn = document.getElementById('ballot-btn');
 	var hint = document.getElementById('ballot-hint');
@@ -23,12 +37,16 @@
 	var tallyEl = document.getElementById('tally');
 	var votersEl = document.getElementById('voters');
 	var sumEl = document.getElementById('sum-voters');
+	var invitedEl = document.getElementById('sum-invited');   // 초대 모드에만 있다
+	var pendingEl = document.getElementById('pending-note');
+	var pendingNamesEl = document.getElementById('pending-names');
+	var pendingDoneEl = document.getElementById('pending-done');
 	var statusEl = document.getElementById('head-status');
 	var ballotPanel = document.getElementById('ballot-panel');
 	var closedPanel = document.getElementById('closed-panel');
 	var closeBtn = document.getElementById('btn-close');
 
-	/* ---------- 공유 ---------- */
+	/* ---------- 공유 (방장 화면에만 있다) ---------- */
 	var copyBtn = document.getElementById('btn-copy');
 
 	if (copyBtn) {
@@ -66,7 +84,7 @@
 		});
 	}
 
-	/* ---------- 저장된 이름 채우기 ---------- */
+	/* ---------- 저장된 이름 채우기 (open 모드만) ---------- */
 	if (nickEl) {
 		var saved = DS.store.get('ds_nick');
 		if (saved && !nickEl.value) { nickEl.value = saved; }
@@ -96,10 +114,13 @@
 			var ids = opts.filter(function (o) { return o.checked; })
 				.map(function (o) { return parseInt(o.value, 10); });
 
-			if (!nickEl.value.trim()) {
-				DS.toast('이름을 입력해 주세요.', true);
-				nickEl.focus();
-				return;
+			// 초대 모드에는 이름 입력이 없다. 여기서 분기하지 않으면 항상 실패한다.
+			if (!isInvite) {
+				if (!nickEl.value.trim()) {
+					DS.toast('이름을 입력해 주세요.', true);
+					nickEl.focus();
+					return;
+				}
 			}
 
 			if (!ids.length) {
@@ -107,21 +128,29 @@
 				return;
 			}
 
+			var body = {
+				option_ids: ids,
+				comment: commentEl ? commentEl.value.trim() : ''
+			};
+
+			// 초대 모드는 nickname 을 보내지 않는다 (서버가 명단의 이름을 쓴다).
+			if (!isInvite) {
+				body.voter_key = voterKey;
+				body.nickname = nickEl.value.trim();
+			}
+
 			btn.disabled = true;
 			btn.textContent = '보내는 중…';
 
-			DS.api('api/vote/' + R.code + '/cast', {
+			DS.api(apiRoom + '/cast', {
 				method: 'POST',
-				body: {
-					voter_key: voterKey,
-					nickname: nickEl.value.trim(),
-					option_ids: ids,
-					comment: commentEl ? commentEl.value.trim() : ''
-				}
+				body: body
 			}).then(function (res) {
-				voterKey = res.data.voter_key;
-				DS.store.set('ds_voter_' + R.code, voterKey);
-				DS.store.set('ds_nick', nickEl.value.trim());
+				if (!isInvite) {
+					voterKey = res.data.voter_key;
+					DS.store.set('ds_voter_' + R.code, voterKey);
+					DS.store.set('ds_nick', nickEl.value.trim());
+				}
 
 				apply(res.data.state);
 				DS.toast(R.allowChange ? '투표했습니다. 언제든 바꿀 수 있습니다.' : '투표했습니다.');
@@ -152,9 +181,26 @@
 			li.querySelector('.tally-fill').style.width = o.percent + '%';
 		});
 
-		// 참여자
+		// 참여 현황
 		if (sumEl) { sumEl.textContent = state.voter_count; }
 
+		if (invitedEl && typeof state.invited_count === 'number') {
+			invitedEl.textContent = state.invited_count;
+		}
+
+		// 아직 투표하지 않은 사람 (초대 모드에서 총무가 가장 먼저 보는 정보)
+		if (pendingEl || pendingDoneEl) {
+			var pending = state.pending || [];
+
+			if (pendingNamesEl) {
+				pendingNamesEl.textContent = pending.join(', ');
+			}
+
+			if (pendingEl) { pendingEl.hidden = !pending.length; }
+			if (pendingDoneEl) { pendingDoneEl.hidden = pending.length > 0; }
+		}
+
+		// 참여자
 		if (votersEl) {
 			if (!state.voters.length) {
 				votersEl.innerHTML =
@@ -165,14 +211,18 @@
 						? ' <span class="ago">' + DS.escape(v.comment) + '</span>'
 						: '';
 
-					return '<li>' + DS.escape(v.nickname) +
+					// voted === false 는 초대만 되고 아직 투표하지 않은 사람이다.
+					var cls = (v.voted === false) ? ' class="novote"' : '';
+
+					return '<li' + cls + '>' + DS.escape(v.nickname) +
 						'<span class="ago">' + DS.escape(v.ago) + '</span>' + c + '</li>';
 				}).join('');
 			}
 		}
 
 		// 내가 고른 것 체크 유지
-		if (state.me && state.me.picks) {
+		// 초대 모드는 투표 전에도 me 가 존재하므로(명단 행) voted 로 걸러야 한다.
+		if (state.me && state.me.picks && state.me.voted !== false) {
 			opts.forEach(function (o) {
 				o.checked = state.me.picks.indexOf(parseInt(o.value, 10)) !== -1;
 			});
@@ -206,10 +256,15 @@
 	var timer = null;
 
 	function tick() {
-		var q = 'api/vote/' + R.code + '?';
+		var q = apiRoom;
 
-		if (voterKey) { q += 'voter_key=' + encodeURIComponent(voterKey) + '&'; }
-		if (hostKey) { q += 'host_key=' + encodeURIComponent(hostKey); }
+		// 초대 모드는 토큰만으로 나를 식별한다 (쿼리 없음).
+		if (!isInvite) {
+			q += '?';
+
+			if (voterKey) { q += 'voter_key=' + encodeURIComponent(voterKey) + '&'; }
+			if (hostKey) { q += 'host_key=' + encodeURIComponent(hostKey); }
+		}
 
 		DS.api(q).then(function (res) {
 			apply(res.data);
@@ -238,8 +293,8 @@
 		if (document.visibilityState === 'visible' && R.status !== 'closed') { tick(); }
 	});
 
-	// 이미 투표했다면 초기 상태를 한 번 당겨온다
-	if (voterKey) { tick(); }
+	// 이미 투표했거나(open) 토큰으로 들어왔으면(invite) 초기 상태를 한 번 당겨온다
+	if (voterKey || isInvite) { tick(); }
 
 	startPolling();
 }());
