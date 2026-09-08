@@ -1,0 +1,22 @@
+# DINNERSPOT - index.php 제거 및 정적 자원 예외
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /DINNERSPOT/
+
+    # 실제 파일/디렉터리는 그대로 서빙 (assets, favicon 등)
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # 나머지는 전부 CodeIgniter 프론트 컨트롤러로
+    RewriteRule ^(.*)$ index.php/$1 [L]
+</IfModule>
+
+<IfModule !mod_rewrite.c>
+    ErrorDocument 404 /DINNERSPOT/index.php
+</IfModule>
+
+# 시스템/애플리케이션 디렉터리 직접 접근 차단
+<FilesMatch "\.(sql|log)$">
+    Require all denied
+</FilesMatch>
