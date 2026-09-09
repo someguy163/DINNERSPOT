@@ -32,6 +32,18 @@ user_guide_src/cilexer/pycilexer.egg-info/*
 /tests/results/
 
 # DINNERSPOT
+# 실제 키가 담기는 파일. 이것만 제외하고, 같은 이름의 .example 템플릿은 올린다.
+# (.example 은 아래 경로와 정확히 일치하지 않으므로 자동으로 추적된다)
 /application/config/dinnerspot_local.php
+
+# 세션 파일과 로그는 실행 중 생기는 것이라 올리지 않는다
 /application/cache/sessions/*
 /application/logs/*.php
+
+# 임시 산출물
+/scratch/
+*.bak
+
+# DB 백업 덤프 (README 의 mysqldump 안내로 만들어지는 파일)
+/*_backup.sql
+/dump*.sql

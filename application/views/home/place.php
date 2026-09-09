@@ -5,7 +5,10 @@ $has_geo = ( ! empty($place['lat']) && ! empty($place['lng']));
 <div class="wrap" style="max-width:820px">
 	<section class="place-hero">
 		<p style="margin:0 0 6px;color:var(--muted);font-size:14px">
-			<a href="javascript:history.back()">← 결과로 돌아가기</a>
+			<!-- 실제 href 를 둔다. 공유 링크·새 탭으로 바로 열린 경우
+			     history.back() 은 about:blank 로 가서 빈 화면에 갇힌다.
+			     app.js 의 .js-back 이 같은 출처에서 넘어온 경우에만 back() 한다. -->
+			<a class="js-back" href="<?= base_url() ?>">← 결과로 돌아가기</a>
 		</p>
 		<h1><?= h($place['name']) ?></h1>
 		<p class="crumbs">
@@ -20,7 +23,7 @@ $has_geo = ( ! empty($place['lat']) && ! empty($place['lng']));
 
 		<div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap">
 			<a class="btn btn-ember" target="_blank" rel="noopener"
-			   href="https://map.naver.com/p/search/<?= rawurlencode($place['name'] . ' ' . $addr) ?>">
+			   href="<?= h(ds_naver_map_url($place['name'], $place['address'] ?: $place['road_address'])) ?>">
 				네이버 지도에서 열기
 			</a>
 			<?php if ($place['phone']): ?>

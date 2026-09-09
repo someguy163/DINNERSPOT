@@ -61,6 +61,19 @@
 		});
 	}
 
+	/* ---------- 방장 전용: 초대 링크 화면 ----------
+	   초대 링크 목록은 방장만 열 수 있다(서버가 host_key 를 검증한다).
+	   host_key 는 이 브라우저에만 있으므로 주소에 실어 준다 — 세션이 끊긴 뒤에도
+	   다시 들어갈 수 있는 유일한 경로다. 서버는 한 번 받으면 세션으로 옮기고
+	   주소를 되돌리므로 host_key 가 주소창에 남지는 않는다. */
+	var invitesBtn = document.getElementById('btn-invites');
+
+	if (invitesBtn && hostKey && R.mode === 'invite') {
+		invitesBtn.href = invitesBtn.getAttribute('href') +
+			'?host_key=' + encodeURIComponent(hostKey);
+		invitesBtn.hidden = false;
+	}
+
 	/* ---------- 방장 마감 ---------- */
 	if (hostKey && closeBtn && R.status === 'open') {
 		closeBtn.hidden = false;
@@ -155,8 +168,17 @@
 				apply(res.data.state);
 				DS.toast(R.allowChange ? '투표했습니다. 언제든 바꿀 수 있습니다.' : '투표했습니다.');
 
-				btn.disabled = false;
-				btn.textContent = '투표 바꾸기';
+				// 초대 모드에서 재투표가 막힌 방은 뷰가 처음부터 disabled 로 그린다.
+				// 보낸 직후에도 같은 상태로 맞춘다 — 안 맞추면 "투표 바꾸기" 가 눌리는데
+				// 서버가 매번 거절해서 막다른 버튼이 된다.
+				// open 모드는 예전 동작(항상 다시 눌릴 수 있음)을 그대로 둔다.
+				if (isInvite && !R.allowChange) {
+					btn.textContent = '투표 완료';
+					btn.disabled = true;
+				} else {
+					btn.disabled = false;
+					btn.textContent = '투표 바꾸기';
+				}
 			}).catch(function (err) {
 				btn.disabled = false;
 				btn.textContent = '투표하기';

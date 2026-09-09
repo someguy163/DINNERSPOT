@@ -60,9 +60,11 @@ $config['naver_timeout']     = 4;    // 초
 $config['naver_display']     = 5;    // 지역검색 API 1회 최대 건수(고정 5)
 $config['naver_max_queries'] = 8;    // 한 번의 추천에서 던질 최대 질의 수
 $config['naver_cache_hours'] = 24;   // 동일 지역 재수집 억제 시간
-$config['naver_recollect_min'] = 1;  // 기준점 근처에 최근 수집분이 이 수보다 적으면 다시 수집
-                                     // (1 = 한 번이라도 수집했으면 건너뜀. 같은 질의를
-                                     //  다시 던져봐야 같은 결과라 호출만 낭비된다)
+$config['naver_recollect_min'] = 1;  // ※ 현재 **읽는 코드가 없다.** 지역 단위 재수집 억제를
+                                     // 위해 둔 값인데, 그 판단이 질의 문자열 단위
+                                     // (t_naver_queries + naver_cache_hours)로 옮겨가면서
+                                     // should_fetch() 가 이 키를 보지 않게 됐다.
+                                     // 값을 바꿔도 동작은 달라지지 않는다.
 $config['naver_sort']        = 'comment';  // comment=리뷰순(인기도 신호로 활용) | random
 
 /* -----------------------------------------------------------------
@@ -113,7 +115,21 @@ $config['default_radius']    = 800;   // m
 $config['radius_options']    = array(300, 500, 800, 1500, 3000);
 $config['default_headcount'] = 6;
 $config['default_budget']    = 25000;
-$config['result_limit']      = 20;    // 추천 결과 최대 건수
+/*
+ | 결과 목록의 크기.
+ |
+ |   per_page     한 페이지에 보여줄 건수
+ |   result_limit 순위에 남길 **전체** 최대 건수 (= 페이징 대상 전체)
+ |
+ | 예전에는 result_limit 이 "표시 건수" 였고 페이징이 없어서 21위부터는
+ | 볼 방법이 없었다. 실측하면 반경 800m 에서 후보가 162곳인데 20건만
+ | 남기고 142곳을 버렸다. 이제 전체를 점수순으로 세운 뒤 페이지로 나눈다.
+ |
+ | 후보 자체는 Place_model::find_candidates() 가 SQL LIMIT 300 으로
+ | 이미 제한하므로 result_limit 은 그 안에서의 상한이다.
+ */
+$config['per_page']          = 10;
+$config['result_limit']      = 200;
 
 /* 예산 구간 프리셋 (원) */
 $config['budget_presets'] = array(

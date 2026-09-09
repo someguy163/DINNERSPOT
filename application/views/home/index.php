@@ -1,5 +1,14 @@
 <?php
 $d = $meta['defaults'];
+
+// 목적별 설명. '데이트' 는 음식 종류가 아니라 목적이라, 음식 칩에서 찾으면 없다.
+// 선택지마다 설명을 붙이고(title) 문장 아래에 한 줄로 노출해 그 오해를 막는다.
+$purpose_desc = array();
+
+foreach ($meta['purposes'] as $p)
+{
+	$purpose_desc[$p['code']] = $p['desc'];
+}
 ?>
 <section class="hero">
 	<div class="wrap">
@@ -11,8 +20,8 @@ $d = $meta['defaults'];
 			<input type="hidden" name="lng" id="f-lng" value="">
 
 			<div class="sentence-line">
-				<span class="nw"><?= $this->load->view('home/_area_picker',
-					array('meta' => $meta, 'sel_area_id' => 0, 'uid' => 'f'), TRUE) ?> 근처에서</span><br>
+				<?= $this->load->view('home/_area_picker', array(
+					'meta' => $meta, 'sel_area_id' => 0, 'uid' => 'f', 'suffix' => '근처에서'), TRUE) ?><br>
 
 				<span class="nw"><span class="blank no-caret">
 					<input type="number" class="w-num" name="headcount" id="f-head"
@@ -29,13 +38,21 @@ $d = $meta['defaults'];
 				</span> 으로</span><br>
 
 				<span class="nw"><span class="blank">
-					<select name="purpose" aria-label="회식 목적">
+					<select name="purpose" aria-label="목적">
 						<?php foreach ($meta['purposes'] as $p): ?>
-							<option value="<?= h($p['code']) ?>"><?= h($p['label']) ?></option>
+							<option value="<?= h($p['code']) ?>" title="<?= h($p['desc']) ?>"><?= h($p['label']) ?></option>
 						<?php endforeach; ?>
 					</select>
 				</span> 할</span> 만한 곳을 찾습니다.
 			</div>
+
+			<?php if (isset($purpose_desc['date'])): ?>
+				<p style="margin:14px 0 0;color:var(--muted-2);font-size:14px;font-weight:500;line-height:1.65">
+					<b>목적</b>은 음식 종류가 아닙니다 — 아래 음식 칩이 아니라 문장 안에서 고릅니다.
+					회식이 아닌 <b>데이트</b>도 여기 있습니다.
+					<?= h($purpose_desc['date']) ?>.
+				</p>
+			<?php endif; ?>
 
 			<dl class="tune">
 				<dt>음식</dt>
@@ -66,8 +83,15 @@ $d = $meta['defaults'];
 						</label>
 					<?php endforeach; ?>
 					<button type="button" class="chip" id="btn-geo">📍 내 위치 기준</button>
+					<?php if ($meta['map_key'] !== ''): ?>
+						<button type="button" class="chip" id="f-btn-map"
+						        aria-expanded="false" aria-controls="f-mappick">🗺 지도에서 조정</button>
+					<?php endif; ?>
 				</dd>
 			</dl>
+
+			<?= $this->load->view('home/_map_picker',
+				array('meta' => $meta, 'uid' => 'f', 'init_lat' => 0, 'init_lng' => 0), TRUE) ?>
 
 			<div class="submit-row">
 				<button type="submit" class="btn btn-ember btn-lg">추천 받기</button>
@@ -121,7 +145,8 @@ $d = $meta['defaults'];
 				<li><span class="k">인원</span><span>수용 인원이 참석 인원보다 여유 있으면 만점.</span></li>
 				<li><span class="k">평점</span><span>리뷰 수가 적으면 평균 쪽으로 당겨서 보정합니다.</span></li>
 				<li><span class="k">조건</span><span>룸·주차·심야는 고른 것만 채점합니다.</span></li>
-				<li><span class="k">목적</span><span>접대는 평점과 룸을, 가성비는 예산을 더 크게 봅니다.</span></li>
+				<li><span class="k">목적</span><span>접대는 평점과 룸을, 가성비는 예산을 더 크게 봅니다.
+					회식이 아닌 데이트는 인원 비중을 거의 빼고 평점을 크게 보며, 카페·디저트도 후보에 넣습니다.</span></li>
 			</ul>
 		</div>
 		<div class="panel">

@@ -5,6 +5,19 @@
 --         (--default-character-set 을 빼면 XAMPP 클라이언트 기본 charset 이
 --          euckr 이라 t_vote_rooms.title 의 한글 DEFAULT 에서 ERROR 1067 로 죽는다.
 --          아래 SET NAMES 가 2차 방어선이지만 CLI 인자를 붙이는 편이 확실하다.)
+--
+--  ###########################################################
+--  #  주의: 이 파일은 DROP TABLE 로 시작한다.                 #
+--  #  이미 쓰던 DB 에 재실행하면 **투표 기록과 수집한 장소가  #
+--  #  전부 사라진다.**                                        #
+--  #                                                          #
+--  #  스키마를 바꿀 때는 이 파일을 다시 돌리지 말고            #
+--  #  sql/00_migrate.sql 에 변경분을 적고 그것을 실행한다.     #
+--  #  (00_migrate.sql 은 데이터를 보존하며 여러 번 실행 가능)  #
+--  #                                                          #
+--  #  이 파일은 "빈 DB 에서 처음 설치할 때" 만 쓴다.           #
+--  #  단, 신규 설치용 정본이므로 스키마 변경은 여기에도 반영한다.#
+--  ###########################################################
 -- =============================================================
 
 CREATE DATABASE IF NOT EXISTS `dinnerspot`
@@ -29,6 +42,7 @@ DROP TABLE IF EXISTS `t_vote_voters`;
 DROP TABLE IF EXISTS `t_vote_options`;
 DROP TABLE IF EXISTS `t_vote_rooms`;
 DROP TABLE IF EXISTS `t_search_logs`;
+DROP TABLE IF EXISTS `t_naver_queries`;
 DROP TABLE IF EXISTS `t_places`;
 DROP TABLE IF EXISTS `t_categories`;
 DROP TABLE IF EXISTS `t_areas`;
@@ -261,6 +275,30 @@ CREATE TABLE `t_vote_ballots` (
     REFERENCES `t_vote_voters` (`room_id`, `id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   COMMENT='투표 기록';
+
+-- -------------------------------------------------------------
+-- 네이버 질의 캐시
+--
+-- 캐시를 "지역" 단위로 잡으면 안 된다. 던지는 질의는 지역 + 카테고리 +
+-- 목적의 조합이라, 같은 지역이라도 사용자가 새 카테고리를 고르면
+-- 한 번도 던진 적 없는 질의가 생긴다.
+-- 지역 단위로 막으면 그 질의가 영원히 나가지 않아 해당 업종이 후보에
+-- 절대 들어오지 않는다 (실측: 강남역에서 "카페/디저트"를 골라도
+-- 네이버 호출 0회, 카페 결과 0건).
+-- 그래서 질의 문자열 단위로 최근 호출 여부를 기록한다.
+-- -------------------------------------------------------------
+DROP TABLE IF EXISTS `t_naver_queries`;
+CREATE TABLE `t_naver_queries` (
+  `id`         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `query_hash` CHAR(40)     NOT NULL COMMENT 'sha1(질의문) - 인덱스 길이 제한 회피',
+  `query_text` VARCHAR(191) NOT NULL COMMENT '실제 질의문 (디버깅용)',
+  `hit_count`  INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '결과 건수',
+  `fetched_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_naver_queries` (`query_hash`),
+  KEY `idx_naver_queries_time` (`fetched_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  COMMENT='네이버 지역검색 질의 캐시 (질의 단위 재호출 억제)';
 
 -- -------------------------------------------------------------
 -- 검색 로그 (추천 품질 개선용)

@@ -46,6 +46,26 @@ class Spot_service {
 		$c['lat'] = $origin['lat'];
 		$c['lng'] = $origin['lng'];
 
+		// 기준점으로 **실제로 쓴 것**을 criteria 에 되돌려 적는다.
+		// ds_criteria_params() 가 area_id 를 보고 좌표를 실을지 정하므로
+		// criteria 가 요청값 그대로 남아 있으면 페이지 링크에서 기준점이 바뀐다.
+		//   - 없는/죽은 area_id + 좌표: 1페이지는 좌표 기준인데 링크는
+		//     area_id 만 싣고 좌표를 버려 2페이지가 '전체' 가 됐다
+		//     (실측: area_id=99999&lat=37.5663&lng=126.9779 -> 2페이지 200곳 '전체').
+		//     area_id=-1 도 같다 — ! empty(-1) 이 TRUE 라서 통과한다.
+		//   - keyword 로 지역을 찾은 경우: area_id 가 0 이라 링크에 지역 사전에서
+		//     채운 좌표가 실려 나가 2페이지의 origin.type 이 area -> coords 로 바뀌었다.
+		// 좌표는 아래에서 $c['lat']/$c['lng'] 로 이미 확정돼 있으므로 정보 손실은 없다.
+		$c['area_id'] = ($origin['type'] === 'area') ? (int) $origin['id'] : 0;
+
+		// 자유 입력 키워드의 업종 의도(점수용 소프트 신호).
+		// 음식 종류를 직접 골랐으면 그것이 이미 하드 필터라서 필요 없다.
+		// 사전 조회는 DB 라서 순수 계산 계층(Recommender)에서 할 수 없고,
+		// 쿼리 조립 전인 여기서 미리 계산해 넣는다.
+		$c['keyword_codes'] = ($c['keyword'] !== '' && empty($c['categories']))
+			? $this->CI->place_model->codes_matching_keyword($c['keyword'])
+			: array();
+
 		$enabled = $this->CI->naver_local->is_enabled();
 
 		// 1) 네이버 수집 (키가 있고, 캐시가 얕을 때만)
@@ -76,13 +96,65 @@ class Spot_service {
 			$candidates        = $this->CI->place_model->find_candidates($c);
 		}
 
-		// 3) 점수화
-		$limit   = (int) $this->cfg('result_limit', 20);
-		$results = $this->CI->recommender->rank($candidates, $c, $limit);
+		// 4) 점수화 — 전체 후보에 점수를 매겨 순위를 만든다.
+		//    페이지 크기로 자르기 전에 전체를 세워야 21위 이하가 존재한다.
+		$limit  = (int) $this->cfg('result_limit', 200);
+		$ranked = $this->CI->recommender->rank($candidates, $c, $limit);
 
-		// 4) 표시용 가공
 		$cat_map = $this->CI->place_model->category_map();
 
+		// 5) 자동완성용 색인 — **걸러내기 전** 전체 순위로 만든다.
+		//    거른 뒤로 만들면 한 번 걸러낸 다음에는 다른 말을 제안할 수 없다.
+		//    한 페이지(10건)가 아니라 전체(수십~200건)를 대상으로 제안해야
+		//    "목록에서 찾기" 가 의미가 있다.
+		$index = array();
+
+		foreach ($ranked as $n => $r)
+		{
+			$code = $r['category_code'];
+
+			// 진짜 순위를 행에 박아둔다. 목록을 걸러낸 뒤에도 "37위" 로
+			// 보여야 한다 — 걸러낸 결과에 01,02… 를 다시 붙이면
+			// 37위인 곳이 1위로 보인다.
+			$ranked[$n]['rank_no'] = $n + 1;
+
+			// 주소는 앞 4토막(시도·시군구·도로명·번호)만 쓴다. 드롭다운에서
+			// 지점을 구별하는 게 목적이라 '지천빌딩 지하1층' 같은 꼬리는
+			// 한 줄을 넘겨 잘리기만 하고, 색인 크기도 그만큼 커진다.
+			$addr = (string) ($r['road_address'] ?: $r['address']);
+			$addr = implode(' ', array_slice(preg_split('/\s+/u', trim($addr), -1, PREG_SPLIT_NO_EMPTY), 0, 4));
+
+			$index[] = array(
+				'id'    => (int) $r['id'],
+				'rank'  => $n + 1,
+				'name'  => $r['name'],
+				'cat'   => isset($cat_map[$code]) ? $cat_map[$code]['label'] : '기타',
+				'addr'  => $addr,
+				'score' => (float) $r['score'],
+			);
+		}
+
+		// 6) 목록 내 검색 — 점수는 건드리지 않고 표시만 줄인다
+		if ($c['find'] !== '')
+		{
+			$ranked = $this->filter_by_find($ranked, $c['find'], $cat_map);
+		}
+
+		// 7) 페이지 자르기
+		$total = count($ranked);
+		$per   = max(1, (int) $c['per_page']);
+		$pages = max(1, (int) ceil($total / $per));
+
+		// 마지막 페이지를 넘는 요청은 빈 목록 대신 마지막 페이지를 준다.
+		// 예전 링크를 다시 열거나, 조건을 좁힌 뒤 5페이지가 3페이지로
+		// 줄어든 경우에 아무것도 없는 화면을 보게 되는 것을 막는다.
+		$page      = min(max(1, (int) $c['page']), $pages);
+		$c['page'] = $page;
+
+		$offset  = ($page - 1) * $per;
+		$results = array_slice($ranked, $offset, $per);
+
+		// 8) 표시용 가공 — 이 페이지에 나가는 것만 가공한다
 		foreach ($results as &$r)
 		{
 			$r = $this->decorate($r, $cat_map);
@@ -91,9 +163,12 @@ class Spot_service {
 
 		$elapsed = (int) round((microtime(TRUE) - $t0) * 1000);
 
+		// 조회 횟수는 실제로 화면에 나간 것만 올린다.
+		// 로그에는 전체 순위 건수를 남긴다 — 페이지 크기를 바꿨을 때
+		// 추천 품질이 달라진 것처럼 보이면 안 된다.
 		$this->CI->place_model->bump_hits(array_column($results, 'id'));
 		$this->CI->place_model->log_search(
-			$origin['label'], $c, count($results), $naver['used'], $elapsed,
+			$origin['label'], $c, $total, $naver['used'], $elapsed,
 			$this->CI->input->ip_address()
 		);
 
@@ -101,6 +176,15 @@ class Spot_service {
 			'criteria'       => $c,
 			'origin'         => $origin,
 			'results'        => $results,
+			'page'           => $page,
+			'per_page'       => $per,
+			'total'          => $total,
+			'total_pages'    => $pages,
+			'offset'         => $offset,
+			// 걸러내기 전 전체 순위 건수. find 가 없으면 total 과 같다.
+			'total_all'      => count($index),
+			'find'           => $c['find'],
+			'index'          => $index,
 			'candidate_cnt'  => count($candidates),
 			'elapsed_ms'     => $elapsed,
 			'naver'          => $naver,
@@ -109,6 +193,113 @@ class Spot_service {
 			'fell_back'      => ! empty($c['fell_back']),
 			'map_key'        => (string) $this->cfg('naver_map_key_id', ''),
 		);
+	}
+
+	/**
+	 * 좌표를 사람이 읽는 위치 설명으로.
+	 *
+	 * 등록된 지역(t_areas)에서 가장 가까운 곳을 기준으로 말한다.
+	 * 멀면 멀다고 말한다 — 200km 떨어진 역을 "근처" 라고 하면 거짓이고,
+	 * 그 경우 이 지역 데이터가 얇다는 것도 같이 알려야 한다.
+	 *
+	 * 좌표 자체는 뒤에 붙이지 않는다. 사람이 확인할 값이 아니고,
+	 * 이 문장이 화면의 한 줄이라 길어지면 뒤가 잘린다.
+	 */
+	public function describe_coords($lat, $lng, $near)
+	{
+		if ( ! $near)
+		{
+			// 좌표는 유효한데 비교할 지역이 없다(사전이 비었거나 전부 미확인).
+			// 없는 지명을 지어내지 않고 좌표를 그대로 보인다.
+			return sprintf('내 위치 · %.5f, %.5f', (float) $lat, (float) $lng);
+		}
+
+		$d    = (int) $near['distance_m'];
+		$dist = ($d >= 1000) ? (round($d / 1000, 1) . 'km') : ($d . 'm');
+		$admin = trim($near['sido'] . ' ' . $near['sigungu']);
+
+		if ($d > 5000)
+		{
+			return sprintf(
+				'내 위치 · 등록된 지역 중 가장 가까운 곳은 %s(%s) — 이 근처는 데이터가 적을 수 있습니다',
+				$near['name'], $dist
+			);
+		}
+
+		// "강남역에서 0m" 는 말이 안 된다. 역 좌표는 대표점 하나뿐이고
+		// 브라우저 위치도 오차가 있어서 수십 m 안쪽의 숫자는 의미가 없다.
+		$where = ($d < 50)
+			? ($near['name'] . ' 바로 앞')
+			: sprintf('%s에서 %s', $near['name'], $dist);
+
+		$out = ($admin !== '' ? $admin . ' · ' : '') . $where;
+
+		if ( ! empty($near['line_info']))
+		{
+			$out .= ' (' . $near['line_info'] . ')';
+		}
+
+		return $out;
+	}
+
+	/**
+	 * 순위표 안에서 말로 걸러낸다.
+	 *
+	 * 점수와 순서는 손대지 않는다 — 이건 검색이 아니라 이미 나온 목록의
+	 * 필터다. 상호명·주소·업종을 훑고, 대소문자와 공백은 무시한다.
+	 * 공백으로 나뉜 여러 낱말은 **전부** 들어있어야 한다(AND).
+	 *
+	 * DB 로 내리지 않고 여기서 하는 이유: 점수를 매긴 뒤라야 "순위 몇 위"
+	 * 를 유지하며 걸러낼 수 있고, 자동완성 색인도 같은 집합에서 나온다.
+	 */
+	protected function filter_by_find(array $rows, $find, array $cat_map)
+	{
+		$norm = function ($s) {
+			// 공백 제거 + 소문자. '강남 역' 과 '강남역' 을 같게 본다.
+			return preg_replace('/\s+/u', '', mb_strtolower((string) $s, 'UTF-8'));
+		};
+
+		$terms = preg_split('/\s+/u', trim($find), -1, PREG_SPLIT_NO_EMPTY);
+		$terms = array_map($norm, $terms);
+		$terms = array_values(array_filter($terms, function ($t) { return $t !== ''; }));
+
+		if ( ! $terms)
+		{
+			return $rows;
+		}
+
+		$out = array();
+
+		foreach ($rows as $r)
+		{
+			$code = $r['category_code'];
+			$hay  = $norm(implode(' ', array(
+				$r['name'],
+				$r['road_address'],
+				$r['address'],
+				$r['category_raw'],
+				isset($cat_map[$code]) ? $cat_map[$code]['label'] : '',
+				$r['tags'],
+			)));
+
+			$hit = TRUE;
+
+			foreach ($terms as $t)
+			{
+				if (mb_strpos($hay, $t, 0, 'UTF-8') === FALSE)
+				{
+					$hit = FALSE;
+					break;
+				}
+			}
+
+			if ($hit)
+			{
+				$out[] = $r;
+			}
+		}
+
+		return $out;
 	}
 
 	/**
@@ -169,11 +360,28 @@ class Spot_service {
 
 		if ( ! empty($c['lat']) && ! empty($c['lng']))
 		{
+			// 좌표만 찍어주면 사용자는 자기가 어디로 검색했는지 알 수 없다.
+			// '37.49793, 127.02758' 은 사람이 읽는 값이 아니다.
+			// 등록된 지역 중 가장 가까운 곳으로 위치를 설명한다.
+			$near = $this->CI->place_model->nearest_area($c['lat'], $c['lng']);
+
 			return array(
 				'type'  => 'coords',
 				'id'    => 0,
-				'label' => $c['keyword'] !== '' ? $c['keyword'] : '현재 위치',
-				'sub'   => sprintf('%.5f, %.5f', $c['lat'], $c['lng']),
+				// 좌표는 "내 위치" 버튼에서도, 지도에서 핀을 옮겨서도 온다.
+				// 서버는 둘을 구분할 수 없으므로 어느 쪽이든 맞는 말을 쓴다 —
+				// '현재 위치' 라고 하면 지도에서 다른 동네를 찍은 경우에 거짓이 된다.
+				// 정확히 어디인지는 아래 sub 가 말해준다.
+				'label' => $c['keyword'] !== '' ? $c['keyword'] : '지정한 위치',
+				'sub'   => $this->describe_coords($c['lat'], $c['lng'], $near),
+				'near'  => $near ? array(
+					'id'         => (int) $near['id'],
+					'name'       => $near['name'],
+					'sido'       => $near['sido'],
+					'sigungu'    => $near['sigungu'],
+					'line_info'  => $near['line_info'],
+					'distance_m' => (int) $near['distance_m'],
+				) : NULL,
 				'lat'   => (float) $c['lat'],
 				'lng'   => (float) $c['lng'],
 			);
@@ -218,42 +426,14 @@ class Spot_service {
 			return FALSE;
 		}
 
-		$hours = (int) $this->cfg('naver_cache_hours', 24);
-
-		if ($hours <= 0)
-		{
-			return TRUE;
-		}
-
-		// 기준점 근처를 최근에 수집한 적이 있는가.
+		// 재호출 억제는 Naver_local 이 **질의 단위**로 한다
+		// (t_naver_queries). 여기서 지역 단위로 한 번 더 막으면,
+		// 같은 지역에서 새 카테고리를 골랐을 때 그 카테고리 질의가
+		// 영원히 나가지 않아 해당 업종이 후보에 절대 들어오지 않는다.
+		// (실측: 강남역에서 "카페/디저트" 선택 -> 호출 0회, 카페 0건)
 		//
-		// "몇 건 이상 쌓였나" 로 판단하면 안 된다. 한 번 수집하면 보통 14~19곳이
-		// 들어오는데 임계값을 15로 두면 14곳인 지역은 매 요청마다 다시 호출한다.
-		// 게다가 같은 질의를 다시 던져봐야 같은 결과라 호출만 낭비된다.
-		// 그래서 "최근에 한 번이라도 수집했으면 건너뛴다" 로 본다.
-		if (empty($origin['lat']))
-		{
-			return TRUE;
-		}
-
-		$d_lat = ($c['radius'] * 1.8) / 111320;
-		$d_lng = $d_lat / max(0.1, cos(deg2rad($origin['lat'])));
-
-		$row = $this->CI->db
-			->select('COUNT(*) AS cnt', FALSE)
-			->from('t_places')
-			->where('source', 'naver')
-			->where('synced_at >=', date('Y-m-d H:i:s', time() - $hours * 3600))
-			->where('lat >=', $origin['lat'] - $d_lat)
-			->where('lat <=', $origin['lat'] + $d_lat)
-			->where('lng >=', $origin['lng'] - $d_lng)
-			->where('lng <=', $origin['lng'] + $d_lng)
-			->get()
-			->row_array();
-
-		$min = (int) $this->cfg('naver_recollect_min', 1);
-
-		return ((int) $row['cnt'] < max(1, $min));
+		// 이미 던진 질의는 Naver_local 이 건너뛰므로 호출 낭비는 없다.
+		return TRUE;
 	}
 
 	/**
@@ -300,6 +480,7 @@ class Spot_service {
 			'cheap'  => array('맛집', '가성비', '백반'),
 			'after'  => array('술집', '호프', '포차'),
 			'quiet'  => array('룸식당', '조용한 식당', '개별룸'),
+			'date'   => array('맛집', '분위기 좋은', '카페', '데이트'),
 		);
 
 		$extra = isset($by_purpose[$c['purpose']]) ? $by_purpose[$c['purpose']] : array('맛집');
@@ -341,8 +522,11 @@ class Spot_service {
 		if ( ! empty($r['has_parking'])) $r['badges'][] = '주차';
 		if ( ! empty($r['open_late']))   $r['badges'][] = '심야';
 
-		// 네이버 지도 길찾기/검색 링크
-		$r['map_url'] = 'https://map.naver.com/p/search/' . rawurlencode($r['name']);
+		// 네이버 지도 검색 링크 (상세 페이지와 같은 헬퍼를 쓴다)
+		$r['map_url'] = ds_naver_map_url(
+			$r['name'],
+			isset($r['address']) ? $r['address'] : ''
+		);
 
 		// 숫자 타입 정리 (JSON 으로 나갈 때 문자열이 되지 않도록)
 		foreach (array('id', 'avg_price', 'max_party', 'review_count', 'price_level') as $k)

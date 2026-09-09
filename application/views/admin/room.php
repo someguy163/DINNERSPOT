@@ -129,7 +129,7 @@ foreach ($invites as $iv)
 	<?php endif; ?>
 
 	<div class="split">
-		<div>
+		<div class="adm-col">
 			<!-- 후보별 득표 -->
 			<div class="panel">
 				<h2>후보별 득표 <span class="num" style="color:var(--muted);font-weight:700"><?= count($options) ?>곳</span></h2>
@@ -232,7 +232,7 @@ foreach ($invites as $iv)
 			</div>
 		</div>
 
-		<div>
+		<div class="adm-col">
 			<!-- 방 정보 -->
 			<div class="panel">
 				<h2>방 정보</h2>

@@ -29,6 +29,7 @@ $route['vote/i/([a-f0-9]+)']           = 'vote/invite/$1';
 /* ---------- JSON API ---------- */
 $route['api/areas']            = 'api/areas';
 $route['api/categories']       = 'api/categories';
+$route['api/whereami']         = 'api/whereami';
 $route['api/recommend']        = 'api/recommend';
 $route['api/place/(:num)']     = 'api/place/$1';
 $route['api/vote/create']      = 'api/vote_create';
@@ -42,4 +43,6 @@ $route['api/vote/i/([a-f0-9]+)/cast']        = 'api/invite_cast/$1';
 $route['admin']                = 'admin/index';
 $route['admin/login']          = 'admin/login';
 $route['admin/logout']         = 'admin/logout';
+$route['admin/areas']          = 'admin/areas';
+$route['admin/areas/geocode']  = 'admin/areas_geocode';
 $route['admin/room/([A-Za-z0-9]+)'] = 'admin/room/$1';

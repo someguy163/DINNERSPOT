@@ -16,6 +16,15 @@ class Place_model extends CI_Model {
 	/** 위도 1도 ≈ 111,320m */
 	const M_PER_DEG_LAT = 111320;
 
+	/**
+	 * 카페 계열 코드.
+	 *
+	 * 회식 장소가 아니라서 기본적으로 후보에서 제외한다. 코드가 여럿이므로
+	 * 한 곳에 모아둔다 — 새 카페 종류를 추가하면 여기에도 넣어야
+	 * apply_source_filter 의 제외가 새지 않는다.
+	 */
+	const CAFE_CODES = array('cafe', 'cafe_fr');
+
 	public function __construct()
 	{
 		parent::__construct();
@@ -161,15 +170,25 @@ class Place_model extends CI_Model {
 	{
 		$this->apply_source_filter($c);
 
+		// 음식 종류는 **하드 필터**다. 사용자가 명시적으로 고른 요구이므로
+		// 안 맞는 업종은 아예 내보내지 않는다.
+		//
+		// 예전에는 점수 가중치로만 처리했는데, 근처에 그 종류가 적으면
+		// 목록이 다른 업종으로 채워져 "카페를 골랐는데 왜 고기집?" 이 됐다.
+		// 0건이 되는 경우는 빈 상태 화면이 이유를 설명한다.
+		if ( ! empty($c['categories']))
+		{
+			$this->db->where_in('category_code', $c['categories']);
+		}
+
+		// 편의 옵션은 여전히 소프트다. 네이버 수집분은 이 값이 업종 추정값이라
+		// 하드로 걸면 실제로는 룸이 있는 곳까지 잘려나간다.
+		// strict 를 켠 사용자만 잘라낸다.
 		if (empty($c['strict']))
 		{
 			return;
 		}
 
-		if ( ! empty($c['categories']))
-		{
-			$this->db->where_in('category_code', $c['categories']);
-		}
 		if ( ! empty($c['need_room']))    $this->db->where('has_room', 1);
 		if ( ! empty($c['need_parking'])) $this->db->where('has_parking', 1);
 		if ( ! empty($c['need_late']))    $this->db->where('open_late', 1);
@@ -201,11 +220,20 @@ class Place_model extends CI_Model {
 		// 카페·디저트는 회식 장소가 아니다. 목적별 감점(-6)만으로는
 		// 역 바로 앞 베이커리가 거리 점수로 1위를 먹는 일이 생긴다
 		// (실측: 잠실역에서 백화점 베이커리가 1위). 명시적으로 고른 경우에만 포함한다.
+		//
+		// 카페 계열 코드가 여럿(cafe, cafe_fr)이므로 하나만 막으면 새는 것에 주의.
+		// 목적이 '데이트'면 카페가 정상적인 후보라서 막지 않는다.
 		$picked = isset($c['categories']) ? (array) $c['categories'] : array();
 
-		if ( ! in_array('cafe', $picked, TRUE))
+		// !! 여기서는 반드시 || 를 쓴다. PHP 의 OR 는 = 보다 우선순위가 낮아서
+		//    `$x = A OR B;` 는 `($x = A) OR B;` 로 파싱되고 B 가 버려진다.
+		//    (실측: 이 줄을 OR 로 썼을 때 데이트 목적에서 카페가 계속 제외됐다)
+		$cafe_ok = ! empty(array_intersect(self::CAFE_CODES, $picked))
+			|| (isset($c['purpose']) && $c['purpose'] === 'date');
+
+		if ( ! $cafe_ok)
 		{
-			$this->db->where('category_code !=', 'cafe');
+			$this->db->where_not_in('category_code', self::CAFE_CODES);
 		}
 	}
 
@@ -322,6 +350,17 @@ class Place_model extends CI_Model {
 				if (empty($exists['attrs_verified']))
 				{
 					$upd = array_merge($upd, $this->guess_attributes($r));
+
+					// 비음식점 판정을 INSERT 에서만 하고 있었다. 그 탓에 차단목록을
+					// 고쳐도 이미 들어온 행은 영원히 is_active=1 로 남는다
+					// (실측: 음악학원·가맹본사·협회 16곳이 후보 풀에 살아 있었다).
+					// 재수집 때 다시 판정한다. 단 **끄는 방향만** 건드린다 —
+					// 1 로 되돌리면 운영자가 손으로 내린 행이 되살아난다.
+					if ( ! $this->is_food_place($r['category_raw'], $r['name']))
+					{
+						$upd['is_active'] = 0;
+						$upd['memo']      = '음식점 아님으로 판정 (' . $r['category_raw'] . ')';
+					}
 				}
 
 				$this->db->where('id', $exists['id'])->update('t_places', $upd);
@@ -412,9 +451,18 @@ class Place_model extends CI_Model {
 			// 숙박·의료·교육
 			'숙박', '호텔', '모텔', '펜션', '게스트하우스',
 			'의료', '병원', '의원', '치과', '한의원', '약국',
-			'교육,학문', '학원', '어학원', '교습',
+			// '교육,학문' 만 막으면 새어나간다 — 네이버는 '음악교육>피아노',
+			// '협회,단체>교육,학교' 처럼 최상위를 다르게 주기도 한다.
+			// (실측: 음악학원 3곳이 is_active=1 로 회식 후보에 올라 있었다)
+			'교육', '학원', '어학원', '교습',
 			// 기타
 			'문화,예술', '관광,명소', '여행,교통', '종교', '회사,단체', '공공,기관',
+			// '회사,단체' 와 짝이 되는 '협회,단체' 도 막는다. 안 막으면 상호가
+			// 아니라 분류의 '협회' 가 seafood 키워드 '회' 에 걸려
+			// 협회 사무실이 횟집 후보가 된다 (실측: 한국수중환경안전협회).
+			// '기업' 은 '기업>프랜차이즈본사'(가맹본사 사무실),
+			// '제조업' 은 '제조업>면류제조'(공장) 를 잡는다.
+			'협회', '기업', '제조업',
 			'자동차', '카센터', '반려동물', '꽃집', '화원',
 		);
 
@@ -458,6 +506,11 @@ class Place_model extends CI_Model {
 			'hof'      => array(20000, 2, 60, 0, 1),
 			'bunsik'   => array(9000,  1, 25, 0, 0),
 			'cafe'     => array(8000,  1, 30, 0, 0),
+			// cafe_fr 이 빠져 있어서 프랜차이즈 카페 전부가 'etc' 로 떨어졌다.
+			// (실측: cafe_fr 79곳이 1인 18,000원 · 수용인원 미상으로 적재됨 —
+			//  스타벅스가 고기집급 예산으로 채점되고 있었다)
+			// 프랜차이즈 카페도 카페다. 없는 값을 새로 지어내지 않고 cafe 와 같게 둔다.
+			'cafe_fr'  => array(8000,  1, 30, 0, 0),
 			'etc'      => array(18000, 2, 0,  0, 0),
 		);
 
@@ -526,6 +579,13 @@ class Place_model extends CI_Model {
 
 			if ($hit !== NULL)
 			{
+				// 카페는 네이버 분류로 프랜차이즈/개인이 구분되지 않는다
+				// (둘 다 "음식점>카페,디저트"). 상호명의 브랜드로 갈라낸다.
+				if ($hit === 'cafe' && $this->is_franchise_cafe($name))
+				{
+					return 'cafe_fr';
+				}
+
 				return $hit;
 			}
 		}
@@ -533,7 +593,67 @@ class Place_model extends CI_Model {
 		return 'etc';
 	}
 
-	/** 분류 한 조각을 사전과 대조한다. 못 찾으면 NULL. */
+	/**
+	 * 상호명이 프랜차이즈 카페 브랜드인가.
+	 *
+	 * 네이버는 프랜차이즈 여부를 주지 않는다. 브랜드는 수가 한정적이고
+	 * 상호명에 그대로 들어가므로 목록 매칭이 실용적이다.
+	 * 여기 없는 브랜드는 개인 카페(cafe)로 남는다 — 틀린 라벨을 붙이는 것보다
+	 * 분류를 보류하는 편이 낫다.
+	 *
+	 * @param  string $name 상호명
+	 * @return bool
+	 */
+	public function is_franchise_cafe($name)
+	{
+		$hay = mb_strtolower(preg_replace('/\s+/u', '', (string) $name), 'UTF-8');
+
+		if ($hay === '')
+		{
+			return FALSE;
+		}
+
+		$brands = array(
+			// 대형
+			'스타벅스', 'starbucks', '투썸플레이스', '투썸', '커피빈', 'coffeebean',
+			'할리스', 'hollys', '엔젤리너스', '파스쿠찌', '탐앤탐스', '카페베네',
+			// 저가형
+			'이디야', 'ediya', 'megacoffee', '컴포즈커피', '컴포즈',
+			// 메가커피는 실제 상호가 '메가MGC커피' 라 라틴 문자가 섞인다.
+			// 한글만 나열하면 놓친다 (실측: '메가MGC커피 역삼' -> 개인으로 오분류).
+			'메가mgc', '메가커피', '메가엠지씨',
+			'빽다방', '더벤티', '매머드커피', '매머드익스프레스', '커피에반하다',
+			'감성커피', '벤티프레소', '수페르가', '더리터', '팀홀튼', 'timhortons',
+			// 실제 수집분에서 개인 카페로 잘못 남아 있던 브랜드들
+			// (파리크라상 서울역점 / 커피스미스 본사점 / 커피나인 강남역)
+			'커피스미스', 'coffeesmith', '커피나인', '커피베이', '스무디킹', 'smoothieking',
+			// 디저트·베이커리 프랜차이즈
+            '파리바게뜨', '파리크라상', '뚜레쥬르', '던킨', 'dunkin', '크리스피크림', '배스킨라빈스',
+			'설빙', '공차', '쥬씨', '요거프레소', '카페드롭탑', '드롭탑', '토프레소',
+			'폴바셋', '블루보틀', '노티드', 'london베이글', '런던베이글',
+		);
+
+		foreach ($brands as $b)
+		{
+			if (mb_strpos($hay, mb_strtolower($b, 'UTF-8')) !== FALSE)
+			{
+				return TRUE;
+			}
+		}
+
+		return FALSE;
+	}
+
+	/**
+	 * 분류 한 조각을 사전과 대조한다. 못 찾으면 NULL.
+	 *
+	 * 한 조각 안에서 여러 키워드가 걸리면 **가장 긴(구체적인) 키워드가 이긴다.**
+	 * 먼저 걸린 것을 그냥 돌려주면 사전 정렬 순서(sort_order)가 승자를 정해버려서,
+	 * 사전에 명시된 잎 단어가 넓은 토큰에 삼켜진다:
+	 *   '닭갈비' -> bbq 의 '갈비' 가 먼저 걸려 고기/구이 (chicken 사전에 '닭갈비' 가 있는데도)
+	 *   '마라탕' -> stew 의 '탕' 이 먼저 걸려 찌개/탕 (chinese 사전에 '마라' 가 있는데도)
+	 * 길이가 같으면 기존처럼 sort_order 가 앞선 쪽을 쓴다.
+	 */
 	protected function match_segment($seg)
 	{
 		$seg = mb_strtolower(trim((string) $seg), 'UTF-8');
@@ -542,6 +662,9 @@ class Place_model extends CI_Model {
 		{
 			return NULL;
 		}
+
+		$best     = NULL;
+		$best_len = 0;
 
 		foreach ($this->categories() as $cat)
 		{
@@ -554,14 +677,22 @@ class Place_model extends CI_Model {
 			{
 				$kw = trim(mb_strtolower($kw, 'UTF-8'));
 
-				if ($kw !== '' && mb_strpos($seg, $kw) !== FALSE)
+				if ($kw === '')
 				{
-					return $cat['code'];
+					continue;
+				}
+
+				$len = mb_strlen($kw, 'UTF-8');
+
+				if ($len > $best_len && mb_strpos($seg, $kw) !== FALSE)
+				{
+					$best     = $cat['code'];
+					$best_len = $len;
 				}
 			}
 		}
 
-		return NULL;
+		return $best;
 	}
 
 	/**
@@ -602,9 +733,27 @@ class Place_model extends CI_Model {
 			{
 				$k = trim(mb_strtolower($k, 'UTF-8'));
 
-				// 검색어가 키워드를 포함하거나 키워드가 검색어를 포함하면 매칭.
-				// "고기집" 으로 검색해도 키워드 "고기" 에 걸리게 한다.
-				if ($k !== '' && (mb_strpos($k, $kw) !== FALSE OR mb_strpos($kw, $k) !== FALSE))
+				if ($k === '')
+				{
+					continue;
+				}
+
+				// ① 사전 키워드가 검색어를 포함 ("회" -> "회", "물회")
+				if (mb_strpos($k, $kw) !== FALSE)
+				{
+					$out[] = $cat['code'];
+					break;
+				}
+
+				// ② 검색어가 사전 키워드를 포함 ("고기집" -> "고기").
+				//
+				// 이 방향은 **두 글자 이상** 키워드만 인정한다. 한 글자 키워드는
+				// 무관한 낱말 안에서 계속 걸려 엉뚱한 업종을 끌어온다:
+				//   "회식"       -> seafood('회')    실측: 상위 20건 중 11건이 횟집
+				//   "바지락칼국수" -> izakaya('바')
+				//   "탕수육"      -> stew('탕')
+				// 사전에 남아 있는 한 글자 키워드는 회·탕·닭·바 넷이다.
+				if (mb_strlen($k, 'UTF-8') >= 2 && mb_strpos($kw, $k) !== FALSE)
 				{
 					$out[] = $cat['code'];
 					break;
@@ -750,11 +899,140 @@ class Place_model extends CI_Model {
 			->count_all_results('t_areas');
 	}
 
+	/**
+	 * 좌표 미확인 지역 목록. 관리자 화면에서 "무엇이 비었는지" 를 보여준다.
+	 *
+	 * 개수만 알려주면 무엇을 고쳐야 하는지 알 수 없다. 보정에 실패하는 이름은
+	 * 대개 네이버가 못 찾는 상권명이라, 이름을 봐야 시드를 손볼 수 있다.
+	 *
+	 * @param  int $limit
+	 * @return array
+	 */
+	public function areas_pending_geo($limit = 200)
+	{
+		return $this->db
+			->where('is_active', 1)
+			->where('geo_verified', 0)
+			->order_by('sort_order', 'ASC')
+			->order_by('name', 'ASC')
+			->limit((int) $limit)
+			->get('t_areas')
+			->result_array();
+	}
+
+	/**
+	 * 지역 사전 현황 집계.
+	 *
+	 * 갱신 작업의 유일한 판단 근거다 — 시드를 다시 넣었을 때 몇 곳이 늘었고
+	 * 좌표가 몇 곳 비어 있는지, 출처가 위키/네이버 중 어디인지를 한 번에 본다.
+	 * 쿼리빌더 상태가 섞이지 않도록 집계는 SQL 한 방으로 끝낸다.
+	 *
+	 * @return array ['total','active','inactive','pending','stations','districts',
+	 *                'src_naver','src_url','src_none','sido'=>[['sido','total','pending'],...]]
+	 */
+	public function area_stats()
+	{
+		$row = $this->db->query(
+			'SELECT COUNT(*) AS total,'
+			. ' SUM(is_active = 1) AS active,'
+			. ' SUM(is_active = 0) AS inactive,'
+			. ' SUM(is_active = 1 AND geo_verified = 0) AS pending,'
+			. ' SUM(kind = \'station\') AS stations,'
+			. ' SUM(kind = \'district\') AS districts,'
+			. ' SUM(geo_source = \'naver\') AS src_naver,'
+			. ' SUM(geo_source LIKE \'http%\') AS src_url,'
+			. ' SUM(geo_source = \'\') AS src_none'
+			. ' FROM t_areas'
+		)->row_array();
+
+		$sido = $this->db->query(
+			'SELECT sido, COUNT(*) AS total,'
+			. ' SUM(is_active = 1 AND geo_verified = 0) AS pending'
+			. ' FROM t_areas WHERE is_active = 1'
+			. ' GROUP BY sido ORDER BY MIN(sort_order) ASC'
+		)->result_array();
+
+		$out = array('sido' => array());
+
+		foreach (array('total', 'active', 'inactive', 'pending', 'stations',
+			'districts', 'src_naver', 'src_url', 'src_none') as $k)
+		{
+			$out[$k] = isset($row[$k]) ? (int) $row[$k] : 0;
+		}
+
+		foreach ($sido as $s)
+		{
+			$out['sido'][] = array(
+				'sido'    => ($s['sido'] !== '') ? $s['sido'] : '기타',
+				'total'   => (int) $s['total'],
+				'pending' => (int) $s['pending'],
+			);
+		}
+
+		return $out;
+	}
+
 	public function area($id)
 	{
 		$row = $this->db->where('id', (int) $id)->get('t_areas')->row_array();
 
 		return $row ?: NULL;
+	}
+
+	/**
+	 * 좌표에서 가장 가까운 지역(역/상권)을 찾는다.
+	 *
+	 * "내 위치" 로 검색했을 때 **여기가 어디인지** 말해주기 위한 것이다.
+	 * 네이버 역지오코딩(Reverse Geocoding)을 쓰면 행정동 주소가 나오지만
+	 * 그건 NCP 에서 별도 구독이 필요한 상품이라 지금 키로는 401 이다
+	 * (실측: maps.apigw.ntruss.com/map-reversegeocode -> "A subscription
+	 * to the API is required"). 추가 키·과금 없이, 이미 출처가 확인된
+	 * t_areas 좌표 122곳으로 답한다. 이 앱은 어차피 역 기준으로 검색하니
+	 * "강남역에서 320m" 가 도로명 주소보다 쓸모 있다.
+	 *
+	 * 거리 계산은 SQL 로 하지 않고(인덱스를 못 타고 DB별 함수가 갈린다)
+	 * 좌표가 확인된 행만 읽어 PHP 에서 계산한다. 122행이라 무리가 없다.
+	 *
+	 * @return array|NULL  지역 행 + distance_m. 좌표가 없으면 NULL
+	 */
+	public function nearest_area($lat, $lng)
+	{
+		$lat = (float) $lat;
+		$lng = (float) $lng;
+
+		if ($lat < -90 OR $lat > 90 OR $lng < -180 OR $lng > 180
+			OR ($lat === 0.0 && $lng === 0.0))
+		{
+			return NULL;
+		}
+
+		$rows = $this->db
+			->where('is_active', 1)
+			->where('geo_verified', 1)
+			->where('lat !=', 0)
+			->where('lng !=', 0)
+			->get('t_areas')
+			->result_array();
+
+		$best = NULL;
+
+		foreach ($rows as $r)
+		{
+			$d = ds_haversine($lat, $lng, $r['lat'], $r['lng']);
+
+			if ($best === NULL OR $d < $best['distance_m'])
+			{
+				$r['distance_m'] = $d;
+				$best = $r;
+			}
+		}
+
+		if ($best !== NULL)
+		{
+			$best['distance_m'] = (int) round($best['distance_m']);
+		}
+
+		return $best;
 	}
 
 	/**

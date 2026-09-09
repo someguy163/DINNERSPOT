@@ -23,7 +23,44 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 | a PHP script and you can easily do that on your own.
 |
 */
-$config['base_url'] = 'http://localhost/DINNERSPOT/';
+/* 접속에 쓰인 호스트를 그대로 base_url 로 쓴다.
+ *
+ * 'http://localhost/DINNERSPOT/' 로 고정해 두면 같은 공유기의 다른 PC 에서
+ * http://192.168.x.x/DINNERSPOT/ 로 들어왔을 때 링크와 CSS/JS 경로가 전부
+ * 그 PC 자신의 localhost 를 가리켜 화면이 통째로 깨진다.
+ *
+ * CI 기본 자동감지($config['base_url'] = '')는 HTTP_HOST 가 아니라
+ * SERVER_ADDR 을 쓴다. localhost 로 들어와도 링크가 127.0.0.1 로 바뀌면서
+ * 세션 쿠키가 갈려 관리자 로그인이 풀리므로 여기서 직접 만든다.
+ *
+ * Host 헤더는 클라이언트가 조작할 수 있으니 호스트명 형태(영숫자·점·하이픈
+ * 과 선택적 포트)만 통과시키고, 어긋나면 localhost 로 떨어뜨린다. */
+$ds_host = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '';
+
+if ( ! preg_match('/^[A-Za-z0-9.\-]+(:\d{1,5})?$/', $ds_host))
+{
+	$ds_host = 'localhost';
+}
+
+/* 설치 폴더는 SCRIPT_NAME 에서 뽑는다. 예전에는 '/DINNERSPOT/' 이 박혀 있어서
+ * 저장소를 다른 이름으로 받으면(htdocs/dinnerspot, htdocs/ds ...) 링크와 CSS 가
+ * 전부 깨졌다. mod_rewrite 를 거쳐도 SCRIPT_NAME 은 '/<폴더>/index.php' 라서
+ * dirname 으로 폴더를 얻을 수 있다. CLI 에서는 SCRIPT_NAME 이 스크립트 경로라
+ * 의미가 없으므로 '/' 로 둔다. */
+$ds_dir = '/';
+
+if (PHP_SAPI !== 'cli' && isset($_SERVER['SCRIPT_NAME']))
+{
+	$ds_dir = strtr(dirname($_SERVER['SCRIPT_NAME']), DIRECTORY_SEPARATOR, '/');
+	$ds_dir = ($ds_dir === '' OR $ds_dir === '.' OR $ds_dir === '/')
+		? '/'
+		: '/' . trim($ds_dir, '/') . '/';
+}
+
+$config['base_url'] = ((! empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off') ? 'https' : 'http')
+	. '://' . $ds_host . $ds_dir;
+
+unset($ds_host, $ds_dir);
 
 /*
 |--------------------------------------------------------------------------

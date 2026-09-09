@@ -213,3 +213,15 @@ DOM 은 항상 존재 여부를 확인하고 빠져나온다(`if (!form) { retur
   지도 자리에 "인증이 실패했습니다" 워터마크 타일을 깔아 화면이 깨져 보인다.
   `navermap_authFailure()` 를 **maps.js 보다 먼저** 전역에 정의해 지도를 걷어내고
   원인·해결법이 담긴 안내로 바꾼다. 스크립트 로드 자체가 실패한 경우도 같은 경로로 보낸다.
+- 2026-09-08 · **`admin/areas.php`(지역 사전)는 새 CSS 를 만들지 않고 기존 `.adm-*` 만 쓴다.**
+  요약 띠는 `.adm-sum`/`.adm-sum-cell`, 표는 `.adm-scroll` + `.adm-table.adm-table-tight`,
+  미확인 배지는 `.adm-st.adm-st-pend`, 안내문은 `.adm-note` / `.notice.notice-soju`.
+  시/도별 전체 목록은 `<details>`/`<summary>` 로 접는다(JS 없음 — 스크립트가 죽어도 열린다).
+  화면을 늘릴 때 `app.css` 에 `.area-*` 같은 새 계열을 만들지 말고 이 관용구를 재사용한다.
+- 2026-09-08 · **`href="javascript:history.back()"` 를 쓰지 마라.** 공유 링크나 새 탭으로
+  바로 열린 페이지에서는 이전 이력이 새 탭 페이지라서 `history.back()` 이 `about:blank`
+  로 가고 사용자가 빈 화면에 갇힌다(실측: 새 탭에서 `/place/44` 를 열고 "← 결과로
+  돌아가기" 를 누르면 탭 URL 이 `about:blank` 가 된다). **실제 폴백 주소를 `href` 에
+  두고** `class="js-back"` 을 붙인다 — `app.js` 가 `document.referrer` 가 같은 출처일
+  때만 `preventDefault()` + `history.back()` 으로 가로챈다. JS 가 죽어도 링크가 동작한다.
+  현재 쓰는 곳: `home/place.php`, `vote/create.php`(둘 다 폴백은 `base_url()`).

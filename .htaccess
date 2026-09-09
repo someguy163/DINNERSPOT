@@ -1,7 +1,12 @@
 # DINNERSPOT - index.php 제거 및 정적 자원 예외
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    RewriteBase /DINNERSPOT/
+
+    # RewriteBase 를 일부러 적지 않는다.
+    # 예전에는 '/DINNERSPOT/' 이 박혀 있어서 저장소를 다른 이름으로 받으면
+    # (htdocs/dinnerspot, htdocs/ds ...) 404 가 났다. 아래 치환이 'index.php/$1'
+    # 처럼 상대경로라서, RewriteBase 가 없으면 아파치가 이 .htaccess 가 놓인
+    # 디렉터리를 기준으로 알아서 붙인다. 그래서 폴더 이름이 무엇이든 동작한다.
 
     # 실제 파일/디렉터리는 그대로 서빙 (assets, favicon 등)
     RewriteCond %{REQUEST_FILENAME} -f [OR]
@@ -12,6 +17,10 @@
     RewriteRule ^(.*)$ index.php/$1 [L]
 </IfModule>
 
+# mod_rewrite 가 아예 없을 때의 폴백. 이 줄만은 폴더 이름을 적을 수밖에 없다
+# (.htaccess 에서 ErrorDocument 경로는 동적으로 만들 수 없다).
+# 폴더 이름을 바꿨고 mod_rewrite 도 못 켜는 환경이라면 이 줄을 맞춰 고친다.
+# XAMPP 는 mod_rewrite 가 기본으로 켜져 있어 보통 이 블록은 쓰이지 않는다.
 <IfModule !mod_rewrite.c>
     ErrorDocument 404 /DINNERSPOT/index.php
 </IfModule>
@@ -20,3 +29,17 @@
 <FilesMatch "\.(sql|log)$">
     Require all denied
 </FilesMatch>
+
+# 텍스트 응답 압축.
+# 지역 사전이 585곳으로 늘면서 홈 HTML 이 38KB -> 127KB 가 됐다.
+# 지역 <option> 을 서버가 전부 출력하는 구조라서 그렇다(JS 없이도 고를 수 있게).
+# 압축하면 대부분 되돌아온다.
+#
+# XAMPP 기본 httpd.conf 에는 mod_deflate 가 **로드되어 있지 않다.**
+# 켜려면 conf/httpd.conf 에서 아래 줄의 앞 # 을 지우고 Apache 를 재시작한다:
+#   LoadModule deflate_module modules/mod_deflate.so
+# 로드되어 있지 않으면 이 블록은 그냥 무시된다.
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/css text/javascript
+    AddOutputFilterByType DEFLATE application/javascript application/json
+</IfModule>

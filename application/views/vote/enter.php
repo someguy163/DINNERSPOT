@@ -4,7 +4,7 @@
 
 	<div class="panel">
 		<?php if ($error): ?>
-			<p class="notice" style="margin-top:0;border-left-color:var(--danger);background:rgba(194,50,31,.06)">
+			<p class="notice notice-danger" style="margin-top:0" role="alert">
 				<?= h($error) ?>
 			</p>
 		<?php endif; ?>

@@ -4,7 +4,8 @@
 			<h1>투표 만들기</h1>
 			<p class="crumbs"><span>후보 <b><?= count($places) ?>곳</b>을 팀에 물어봅니다</span></p>
 		</div>
-		<a class="btn btn-ghost btn-sm" href="javascript:history.back()">후보 다시 고르기</a>
+		<!-- href 는 폴백이다. 이력이 없을 때 history.back() 은 about:blank 로 간다. -->
+		<a class="btn btn-ghost btn-sm js-back" href="<?= base_url() ?>">후보 다시 고르기</a>
 	</div>
 
 	<?php if (count($places) < $min): ?>

@@ -122,6 +122,12 @@ class Naver_local {
 			if ($json !== NULL)
 			{
 				$this->mode = $mode;
+
+				// 앞선 모드가 인증 오류로 실패했다가 이쪽에서 성공한 경우다.
+				// 여기서 지우지 않으면 last_error 에 죽은 오류가 남아
+				// search_many() 가 is_fatal_error() 로 오해해 첫 질의에서 멈추고,
+				// diagnose() 도 성공했는데 "연결 실패" 라고 보고한다.
+				$this->last_error = '';
 				break;
 			}
 
@@ -267,6 +273,60 @@ class Naver_local {
 		return $json;
 	}
 
+	/**
+	 * 이 질의를 최근에 던졌는가.
+	 *
+	 * naver_cache_hours 안에 던진 질의는 결과가 같으므로 다시 호출하지 않는다.
+	 * 캐시 단위가 "질의" 라는 점이 중요하다 - "지역" 단위로 잡으면 같은 지역에서
+	 * 새 카테고리를 골랐을 때 그 질의가 한 번도 나가지 않는다.
+	 */
+	protected function query_is_fresh($query)
+	{
+		$hours = (int) ($this->cfg('naver_cache_hours') ?: 24);
+
+		if ($hours <= 0)
+		{
+			return FALSE;
+		}
+
+		$row = $this->CI->db
+			->select('id')
+			->where('query_hash', sha1(trim((string) $query)))
+			->where('fetched_at >=', date('Y-m-d H:i:s', time() - $hours * 3600))
+			->get('t_naver_queries')
+			->row_array();
+
+		return ! empty($row);
+	}
+
+	/** 질의를 던졌다고 기록한다 (있으면 시각만 갱신) */
+	protected function remember_query($query, $hits)
+	{
+		$query = trim((string) $query);
+		$hash  = sha1($query);
+		$now   = date('Y-m-d H:i:s');
+
+		$exists = $this->CI->db->select('id')->where('query_hash', $hash)
+			->get('t_naver_queries')->row_array();
+
+		if ($exists)
+		{
+			$this->CI->db->where('id', $exists['id'])->update('t_naver_queries', array(
+				'hit_count'  => (int) $hits,
+				'fetched_at' => $now,
+			));
+
+			return;
+		}
+
+		$this->CI->db->insert('t_naver_queries', array(
+			'query_hash' => $hash,
+			'query_text' => mb_substr($query, 0, 191, 'UTF-8'),
+			'hit_count'  => (int) $hits,
+			'fetched_at' => $now,
+		));
+	}
+
 	/** 마지막 오류가 인증/경로 문제라 다른 모드를 시도해볼 만한가 */
 	protected function is_auth_error()
 	{
@@ -293,15 +353,35 @@ class Naver_local {
 		$limit = $limit ?: (int) ($this->cfg('naver_max_queries') ?: 6);
 		$seen  = array();
 		$out   = array();
+		$sent  = 0;
 
-		foreach ($queries as $i => $q)
+		foreach ($queries as $q)
 		{
-			if ($i >= $limit)
+			if ($sent >= $limit)
 			{
 				break;
 			}
 
+			// 질의 단위 캐시. 같은 질의를 최근에 던졌으면 건너뛴다.
+			// 지역 단위로 막으면 새 카테고리에 대한 질의가 영원히 안 나간다.
+			if ($this->query_is_fresh($q))
+			{
+				continue;
+			}
+
+			$sent++;
 			$rows = $this->search($q);
+
+			// **실패한 질의는 캐시에 기록하지 않는다.**
+			// 기록해버리면 네트워크 한 번 끊긴 것만으로 그 질의가
+			// naver_cache_hours(기본 24시간) 동안 봉인되어, 키를 고쳐도
+			// 그 지역이 하루 종일 0건으로 남는다.
+			// 호출이 성공하고 결과가 0건인 경우는 last_error 가 비어 있으므로
+			// 지금까지처럼 정상 캐싱된다.
+			if ($this->last_error === '')
+			{
+				$this->remember_query($q, count($rows));
+			}
 
 			// 키가 틀렸거나 쿼터를 넘긴 상황이면 남은 질의를 던져도 결과가 같다.
 			// 할당량을 더 태우지 않도록 즉시 중단한다.
@@ -318,11 +398,11 @@ class Naver_local {
 				// "강남역 회식" 에서 1위인 집이 "강남역 맛집" 에서 4위여도 1위로 본다.
 				if (isset($seen[$key]))
 				{
-					$i = $seen[$key];
+					$at = $seen[$key];
 
-					if ($row['naver_rank'] < $out[$i]['naver_rank'])
+					if ($row['naver_rank'] < $out[$at]['naver_rank'])
 					{
-						$out[$i]['naver_rank'] = $row['naver_rank'];
+						$out[$at]['naver_rank'] = $row['naver_rank'];
 					}
 
 					continue;

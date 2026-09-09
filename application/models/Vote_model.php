@@ -84,6 +84,23 @@ class Vote_model extends CI_Model {
 
 		foreach ($roster as $nick)
 		{
+			// **같은 이름인지는 DB 가 판정한다.** `uk_vote_voters_nick (room_id, nickname)` 은
+			// utf8mb4_unicode_ci 로 비교하므로 clean_roster() 의 mb_strtolower 보다 넓게
+			// 같다고 본다 (José/Jose, Ａ/A, Straße/Strasse). PHP 쪽 중복 제거만 믿고
+			// 넣으면 그 조합에서 INSERT 가 UNIQUE 위반으로 터져 **방 생성 전체가 실패**한다
+			// (실측: 500 + JSON 대신 DB 오류 HTML). 여기서 걸러 문서화된 동작
+			// "같은 이름은 하나만 남긴다" 로 수렴시킨다.
+			$dup = $this->db->select('id')
+				->where('room_id', $room_id)
+				->where('nickname', $nick)
+				->get('t_vote_voters')
+				->row_array();
+
+			if ($dup)
+			{
+				continue;
+			}
+
 			$token = $this->unique_invite_token();
 
 			$this->db->insert('t_vote_voters', array(
@@ -95,6 +112,15 @@ class Vote_model extends CI_Model {
 			));
 
 			$invites[] = array('nickname' => $nick, 'token' => $token);
+		}
+
+		// 위에서 걸러진 이름이 있으면 참석 인원(= 명단 인원)도 같이 줄인다.
+		// headcount 는 방 INSERT 시점의 count($roster) 라서, 안 맞추면
+		// headcount 와 invited_count 가 어긋나 "3명 중 2명" 이 영원히 안 채워진다.
+		if ($mode === 'invite' && count($invites) !== count($roster))
+		{
+			$this->db->where('id', $room_id)
+				->update('t_vote_rooms', array('headcount' => count($invites)));
 		}
 
 		$this->db->trans_complete();
@@ -254,7 +280,10 @@ class Vote_model extends CI_Model {
 			$this->db->where('status', $opt['status']);
 		}
 
-		if ( ! empty($opt['q']))
+		// 배열/객체가 오면 (string) 캐스팅이 "Array to string conversion" 경고를
+		// 내고 그 HTML 이 관리자 화면 앞에 섞인다(실측: /admin?q[]=x).
+		// 컨트롤러에서도 막지만, 이 메서드를 다른 곳에서 부를 때를 위해 여기서도 본다.
+		if ( ! empty($opt['q']) && is_scalar($opt['q']))
 		{
 			$q = trim((string) $opt['q']);
 
@@ -332,6 +361,22 @@ class Vote_model extends CI_Model {
 			);
 		}
 
+		// 후보 수를 먼저 가져온다. 아래 루프에서 id 를 unset 하기 때문에
+		// 그 뒤에 위치 인덱스로 붙이면 결과셋 순서에 의존하는 취약한 코드가 된다
+		// (array_filter 하나만 걸려도 모든 행의 후보 수가 조용히 어긋난다).
+		$optCnt = array();
+
+		$rows = $this->db->select('room_id, COUNT(*) AS cnt', FALSE)
+			->where_in('room_id', $ids)
+			->group_by('room_id')
+			->get('t_vote_options')
+			->result_array();
+
+		foreach ($rows as $r)
+		{
+			$optCnt[(int) $r['room_id']] = (int) $r['cnt'];
+		}
+
 		foreach ($rooms as &$room)
 		{
 			$rid = (int) $room['id'];
@@ -341,7 +386,7 @@ class Vote_model extends CI_Model {
 			$room['voted_count']   = (int) $v['voted'];
 			$room['total_votes']   = $ballots[$rid] ?? 0;
 			$room['leader']        = $leaders[$rid] ?? NULL;
-			$room['option_count']  = 0;
+			$room['option_count']  = $optCnt[$rid] ?? 0;
 
 			// 참여율: invite 모드는 명단 기준, open 모드는 방장이 적은 참석 인원 기준
 			$base = ($room['mode'] === 'invite')
@@ -353,29 +398,6 @@ class Vote_model extends CI_Model {
 				: NULL;
 
 			unset($room['id']);   // 내부 id 는 내보내지 않는다
-		}
-		unset($room);
-
-		// 후보 수
-		$rows = $this->db->select('room_id, COUNT(*) AS cnt', FALSE)
-			->where_in('room_id', $ids)
-			->group_by('room_id')
-			->get('t_vote_options')
-			->result_array();
-
-		$optCnt = array();
-
-		foreach ($rows as $r)
-		{
-			$optCnt[(int) $r['room_id']] = (int) $r['cnt'];
-		}
-
-		$i = 0;
-
-		foreach ($rooms as &$room)
-		{
-			$room['option_count'] = $optCnt[$ids[$i]] ?? 0;
-			$i++;
 		}
 		unset($room);
 
@@ -443,6 +465,11 @@ class Vote_model extends CI_Model {
 
 	protected function clean($str, $len, $fallback = '')
 	{
+		// nickname[]=x 처럼 배열/객체가 오면 (string) 캐스팅이
+		// "Array to string conversion" 경고를 내고, 그 HTML 이 응답 앞에 섞여
+		// JSON 이 깨진다(개발 환경은 display_errors=1). 값 자체를 없는 것으로 본다.
+		if ( ! is_scalar($str)) $str = '';
+
 		$str = trim(strip_tags((string) $str));
 		$str = mb_substr($str, 0, $len, 'UTF-8');
 
@@ -451,7 +478,8 @@ class Vote_model extends CI_Model {
 
 	protected function clean_deadline($val)
 	{
-		if (empty($val))
+		// 배열/객체는 (string) 캐스팅 경고로 응답을 오염시키므로 미입력으로 본다
+		if (empty($val) OR ! is_scalar($val))
 		{
 			return NULL;
 		}
@@ -494,6 +522,12 @@ class Vote_model extends CI_Model {
 
 	public function room_by_code($code)
 	{
+		// ?code[]=x 로 배열이 들어오면 (string) 캐스팅 경고가 화면 앞에 붙는다
+		if ( ! is_scalar($code))
+		{
+			return NULL;
+		}
+
 		$code = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) $code));
 
 		if ($code === '')
@@ -546,6 +580,10 @@ class Vote_model extends CI_Model {
 	 */
 	public function state(array $room, $voter_key = NULL)
 	{
+		// ?voter_key[]=x 로 배열이 오면 아래 hash_equals 의 (string) 캐스팅이
+		// 경고를 내며 JSON 을 오염시킨다. 식별 불가로 보고 NULL 로 떨어뜨린다.
+		if ( ! is_scalar($voter_key)) $voter_key = NULL;
+
 		$options = $this->options($room['id']);
 
 		// 후보별 득표
@@ -696,7 +734,10 @@ class Vote_model extends CI_Model {
 			return array('ok' => FALSE, 'msg' => '최대 ' . $max . '개까지 선택할 수 있습니다.');
 		}
 
-		$voter_key = preg_replace('/[^a-f0-9]/i', '', (string) $voter_key);
+		// 배열/객체면 토큰 없음으로 본다 ((string) 캐스팅 경고 방지)
+		$voter_key = is_scalar($voter_key)
+			? preg_replace('/[^a-f0-9]/i', '', (string) $voter_key)
+			: '';
 		$existing  = NULL;
 
 		if ($voter_key !== '')
@@ -718,7 +759,14 @@ class Vote_model extends CI_Model {
 			);
 		}
 
-		if ($existing && empty($room['allow_change']))
+		// "행이 있다" 가 아니라 "이미 투표했다" 로 판단해야 한다.
+		//
+		// invite 모드는 create_room() 이 명단 인원만큼 t_vote_voters 행을 미리
+		// 만들어 두므로 $existing 이 투표 전부터 항상 truthy 다. 행 존재로 막으면
+		// 명단 모드 + 재투표 불허(allow_change=0) 방은 첫 투표부터 거절되어
+		// 아무도 투표할 수 없는 죽은 방이 된다 (open 모드는 정상이라 놓치기 쉽다).
+		// voted_at 이 NULL 이면 아직 투표하지 않은 것이다.
+		if ( ! empty($existing['voted_at']) && empty($room['allow_change']))
 		{
 			return array('ok' => FALSE, 'msg' => '이 투표는 재투표가 허용되지 않습니다.');
 		}
@@ -811,6 +859,9 @@ class Vote_model extends CI_Model {
 	/** 방장이 투표 마감 */
 	public function close(array $room, $host_key)
 	{
+		// 배열/객체면 빈 키로 본다 ((string) 캐스팅 경고 방지)
+		if ( ! is_scalar($host_key)) $host_key = '';
+
 		if ( ! hash_equals($room['host_key'], (string) $host_key))
 		{
 			return array('ok' => FALSE, 'msg' => '방장만 마감할 수 있습니다.');

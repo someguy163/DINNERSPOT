@@ -27,6 +27,12 @@ class MY_Controller extends CI_Controller {
 	protected function render($view, array $data = array(), array $layout = array())
 	{
 		$layout = array_merge($this->layout_data, $layout);
+
+		// 헤더에 관리자 메뉴를 띄울지. 비밀번호가 설정되지 않으면 관리자 화면은
+		// 404 이므로 링크도 감춘다 (죽은 링크를 노출하지 않는다).
+		$layout['admin_enabled'] =
+			((string) $this->config->item('admin_password', 'dinnerspot') !== '');
+
 		$layout['content'] = $this->load->view($view, $data, TRUE);
 
 		$this->load->view('layout/main', $layout);

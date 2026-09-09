@@ -19,6 +19,10 @@ class Vote extends MY_Controller {
 	{
 		$code = $this->input->get('code', TRUE);
 
+		// ?code[]=x 로 배열이 오면 뷰의 h() 에서 (string) 캐스팅 경고가 나고
+		// 그 HTML 이 화면 앞에 붙는다. 코드는 항상 문자열 하나다.
+		if ( ! is_scalar($code)) $code = '';
+
 		if ($code)
 		{
 			$room = $this->vote_model->room_by_code($code);
@@ -44,8 +48,17 @@ class Vote extends MY_Controller {
 	/** 후보 선택 -> 방 생성 폼 (추천 결과에서 넘어옴) */
 	public function create_form()
 	{
+		// ?ids[]=1 로 배열이 오면 explode() 가 PHP 8 에서 TypeError 로 터진다
+		// (실측: /vote/new?ids[]=1 -> HTTP 500 + "explode(): Argument #2 ($string)
+		//  must be of type string, array given"). 후보 목록은 늘 쉼표 문자열 하나다.
 		$ids = $this->input->get('ids', TRUE);
-		$ids = $ids ? array_filter(array_map('intval', explode(',', $ids))) : array();
+
+		if ( ! is_scalar($ids))
+		{
+			$ids = '';
+		}
+
+		$ids = ($ids !== '') ? array_filter(array_map('intval', explode(',', (string) $ids))) : array();
 
 		$places = $ids ? $this->place_model->get_many($ids) : array();
 
@@ -137,6 +150,12 @@ class Vote extends MY_Controller {
 		$room  = $found['room'];
 		$voter = $found['voter'];
 
+		// 주소 자체가 이 사람의 투표 권한이다. 색인·캐시 대상이 아니고,
+		// 바깥 링크(푸터의 네이버 문서 등)를 눌렀을 때 Referer 로 새어도 안 된다.
+		$this->output->set_header('Cache-Control: no-store');
+		$this->output->set_header('X-Robots-Tag: noindex, nofollow');
+		$this->output->set_header('Referrer-Policy: no-referrer');
+
 		$this->render('vote/room', array(
 			'state'    => $this->vote_model->state($room, $voter['voter_key']),
 			'code'     => $room['code'],
@@ -156,10 +175,63 @@ class Vote extends MY_Controller {
 	}
 
 	/**
+	 * 방장 확인.
+	 *
+	 * 통과하면 TRUE. 통과하지 못하면 응답을 직접 마무리하므로(404 또는 리다이렉트)
+	 * 호출부는 FALSE 를 받으면 그냥 return 해야 한다.
+	 *
+	 * 통과 조건은 셋 중 하나다.
+	 *   1) 쿼리스트링 host_key 가 방의 host_key 와 일치 — 다른 브라우저·기기에서
+	 *      다시 들어올 때의 유일한 경로다. 통과 즉시 세션으로 옮기고 주소를
+	 *      되돌려서 host_key 가 주소창·방문기록·Referer 에 남지 않게 한다.
+	 *   2) 이 브라우저 세션이 그 방의 방장으로 표시돼 있음 (방 생성 시 심는다)
+	 *   3) 관리자 로그인 세션 — 관리자 화면에서 이 화면으로 넘어오는 링크가 있다
+	 *
+	 * 실패는 403 이 아니라 404 다. 403 은 "그 방이 명단 모드로 존재한다" 를
+	 * 알려주므로, 명단 모드가 아닌 방과 구분되지 않게 맞춘다.
+	 */
+	protected function authorize_host(array $room)
+	{
+		// Admin::SESS 와 같은 값. Admin 클래스는 이 요청에 로드되지 않으므로 리터럴로 둔다.
+		if ($this->session->userdata('ds_admin_ok'))
+		{
+			return TRUE;
+		}
+
+		$sess_key = 'ds_host_' . $room['code'];
+
+		// ?host_key[]=x 로 배열이 오면 (string) 캐스팅이
+		// "Array to string conversion" 경고를 내고 그 HTML 이 404 화면 앞에 붙는다
+		// (실측: /vote/r/{code}/invites?host_key[]=x -> Vote.php 이 줄).
+		// 방장 키는 항상 문자열 하나다. 배열은 키 없음으로 본다.
+		$given = $this->input->get('host_key', FALSE);
+		$given = is_scalar($given) ? (string) $given : '';
+
+		if ($given !== '' && hash_equals((string) $room['host_key'], $given))
+		{
+			$this->session->set_userdata($sess_key, TRUE);
+			redirect('vote/r/' . $room['code'] . '/invites');
+
+			return FALSE;
+		}
+
+		if ($this->session->userdata($sess_key))
+		{
+			return TRUE;
+		}
+
+		show_404();
+
+		return FALSE;
+	}
+
+	/**
 	 * 초대 링크 목록 (방장용).
 	 *
-	 * host_key 를 아는 사람만 볼 수 있다 — 링크 목록이 곧 모든 사람의
-	 * 투표 권한이므로 아무나 보면 안 된다.
+	 * 방장만 볼 수 있다 — 목록 전체가 곧 "모든 사람의 투표 권한" 이다.
+	 * 방 코드로는 열리지 않아야 한다: 코드는 집계 화면 주소이자 단체방에
+	 * 뿌리는 값이라, 코드만으로 열리면 단체방에 있는 누구나 남의 링크로
+	 * 투표할 수 있다.
 	 */
 	public function invites($code)
 	{
@@ -171,6 +243,16 @@ class Vote extends MY_Controller {
 
 			return;
 		}
+
+		if ( ! $this->authorize_host($room))
+		{
+			return;
+		}
+
+		// 이 화면은 캐시·색인 대상이 아니고, 주소가 Referer 로 새어도 안 된다.
+		$this->output->set_header('Cache-Control: no-store');
+		$this->output->set_header('X-Robots-Tag: noindex, nofollow');
+		$this->output->set_header('Referrer-Policy: no-referrer');
 
 		$this->render('vote/invites', array(
 			'room'     => array(

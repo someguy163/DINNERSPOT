@@ -25,7 +25,10 @@ $sum_pct   = ($sum_all > 0) ? (int) round($sum_voted / $sum_all * 100) : NULL;
 			<h1>전체 투표 현황</h1>
 			<p>비밀번호를 아는 사람만 보는 화면입니다. 주소를 공유하지 마세요.</p>
 		</div>
-		<a class="btn btn-ghost btn-sm" href="<?= base_url('admin/logout') ?>">로그아웃</a>
+		<div style="display:flex;gap:8px;flex-wrap:wrap">
+			<a class="btn btn-ghost btn-sm" href="<?= base_url('admin/areas') ?>">지역 사전</a>
+			<a class="btn btn-ghost btn-sm" href="<?= base_url('admin/logout') ?>">로그아웃</a>
+		</div>
 	</div>
 
 	<!-- 요약 -->
@@ -58,7 +61,7 @@ $sum_pct   = ($sum_all > 0) ? (int) round($sum_voted / $sum_all * 100) : NULL;
 			<dd>
 				<span class="adm-sum-big num"><?= (int) $summary['ballots'] ?></span>
 				<span class="adm-sum-sub">
-					<span>1인 여러 곳을 고를 수 있어 참여자보다 많습니다</span>
+					<span>1인 여러 곳 선택 가능</span>
 				</span>
 			</dd>
 		</div>

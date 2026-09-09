@@ -30,7 +30,9 @@
 				       aria-describedby="adm-pw-hint"
 				       <?= ! empty($error) ? 'aria-invalid="true"' : '' ?>>
 				<p class="hint" id="adm-pw-hint">
-					설정 파일(<code>config/dinnerspot.php</code>)의 <b>admin_password</b> 값입니다.
+					<code>application/config/dinnerspot_local.php</code> 의 <b>admin_password</b> 값입니다.
+					<code>dinnerspot.php</code> 쪽에 써도 맨 아래에서 local 파일을 include 하므로
+					조용히 무시됩니다.
 				</p>
 			</div>
 

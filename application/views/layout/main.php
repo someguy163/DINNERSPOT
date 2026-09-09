@@ -24,6 +24,9 @@
 			<a href="<?= base_url() ?>" class="<?= $nav === 'home' ? 'on' : '' ?>">추천받기</a>
 			<a href="<?= base_url('vote') ?>" class="<?= $nav === 'vote' ? 'on' : '' ?>">투표 참여</a>
 			<a href="<?= base_url('guide') ?>" class="<?= $nav === 'guide' ? 'on' : '' ?>">설정</a>
+			<?php if ( ! empty($admin_enabled)): ?>
+				<a href="<?= base_url('admin') ?>" class="nav-admin <?= $nav === 'admin' ? 'on' : '' ?>">관리자</a>
+			<?php endif; ?>
 		</nav>
 	</div>
 </header>

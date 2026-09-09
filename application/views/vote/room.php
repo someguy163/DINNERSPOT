@@ -12,6 +12,14 @@ $closed  = ($room['status'] === 'closed');
  */
 $is_invite = isset($invite);
 
+/**
+ * 명단 모드 방의 코드 주소(/vote/r/{code})는 단체방에 뿌리는 "집계 보기" 주소다.
+ * 사람 식별이 초대 토큰이라 서버가 이 경로의 투표를 거부하므로
+ * (api/vote/{code}/cast -> "초대받은 사람만 참여할 수 있습니다"),
+ * 투표 폼을 그대로 두면 이름·후보를 다 채운 뒤 오류 토스트만 받는 막다른 길이 된다.
+ */
+$invite_only = ( ! $is_invite && $room['mode'] === 'invite');
+
 $invited_count = isset($state['invited_count']) ? (int) $state['invited_count'] : (int) $state['voter_count'];
 $voter_count   = (int) $state['voter_count'];
 $pending       = isset($state['pending']) ? (array) $state['pending'] : array();
@@ -21,6 +29,12 @@ $has_voted = ($is_invite && ! empty($state['me']) && ! empty($state['me']['voted
 $my_picks  = $has_voted ? array_map('intval', (array) $state['me']['picks']) : array();
 $my_note   = $has_voted ? (string) $state['me']['comment'] : '';
 $locked    = ($has_voted && empty($room['allow_change']));
+
+// 인라인 스크립트로 넘기는 값의 인코딩 플래그.
+// nickname 처럼 사람이 넣은 문자열이 섞이므로 `</script>` 탈출을 값의 성질에
+// 기대지 않고 인코딩 단계에서 막는다 (vote/invites.php 와 같은 조합).
+$JS_ENC = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+	| JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
 ?>
 <section class="vote-head">
 	<div class="wrap">
@@ -43,6 +57,12 @@ $locked    = ($has_voted && empty($room['allow_change']));
 				<span class="code-badge"><?= h($code) ?></span>
 				<input type="text" id="share-url" value="<?= h($room_url) ?>" readonly aria-label="공유 링크">
 				<button class="btn btn-sm" type="button" id="btn-copy">링크 복사</button>
+				<?php if ($room['mode'] === 'invite'): ?>
+					<!-- 명단 모드 방장에게만 보인다. 서버가 host_key 를 검증하므로
+					     주소에 붙일 host_key 는 JS 가 채운다(그 값은 브라우저에만 있다). -->
+					<a class="btn btn-sm btn-soju" id="btn-invites" hidden
+					   href="<?= h(base_url('vote/r/' . rawurlencode($code) . '/invites')) ?>">초대 링크</a>
+				<?php endif; ?>
 				<button class="btn btn-sm btn-ember" type="button" id="btn-close" hidden>투표 마감</button>
 			</div>
 		<?php endif; ?>
@@ -53,7 +73,7 @@ $locked    = ($has_voted && empty($room['allow_change']));
 	<div class="split">
 
 		<!-- 투표 -->
-		<div class="panel" id="ballot-panel" <?= $closed ? 'hidden' : '' ?>>
+		<div class="panel" id="ballot-panel" <?= ($closed OR $invite_only) ? 'hidden' : '' ?>>
 			<h2>어디가 좋으세요?</h2>
 
 			<form id="ballot-form">
@@ -109,13 +129,30 @@ $locked    = ($has_voted && empty($room['allow_change']));
 					       value="<?= h($my_note) ?>" placeholder="예: 저는 회 못 먹어요">
 				</div>
 
+				<!-- 잠긴 방에서 "투표 바꾸기" 라고 쓰면 바꿀 수 있다는 뜻이 되어 버린다 -->
 				<button class="btn btn-ember btn-lg" type="submit" id="ballot-btn" style="width:100%"
 				        <?= $locked ? 'disabled' : '' ?>>
-					<?= $has_voted ? '투표 바꾸기' : '투표하기' ?>
+					<?php if ($locked): ?>투표 완료<?php elseif ($has_voted): ?>투표 바꾸기<?php else: ?>투표하기<?php endif; ?>
 				</button>
 				<p class="hint" id="ballot-hint" style="text-align:center;margin-top:10px"></p>
 			</form>
 		</div>
+
+		<!-- 명단 모드 방을 코드 주소로 열었을 때 — 투표는 개인 링크에서만 된다 -->
+		<?php if ($invite_only && ! $closed): ?>
+			<div class="panel">
+				<h2>투표는 개인 링크에서 합니다</h2>
+				<p class="notice notice-soju" style="margin:0 0 14px">
+					이 투표는 <b>한 사람에게 링크 하나</b>가 나갑니다.
+					총무가 개인 메시지로 보낸 <b>내 링크</b>로 들어가야 투표할 수 있습니다.
+					이 주소는 <b>집계를 함께 보는 주소</b>입니다.
+				</p>
+				<p style="color:var(--muted);margin:0">
+					링크를 못 받았거나 잃어버렸으면 총무에게 다시 요청하세요.
+					아래 집계는 자동으로 갱신됩니다.
+				</p>
+			</div>
+		<?php endif; ?>
 
 		<!-- 마감 안내 -->
 		<div class="panel" id="closed-panel" <?= $closed ? '' : 'hidden' ?>>
@@ -178,12 +215,13 @@ $locked    = ($has_voted && empty($room['allow_change']));
 
 <script>
 window.DS_ROOM = {
-	code: <?= json_encode($code) ?>,
+	code: <?= json_encode($code, $JS_ENC) ?>,
+	mode: <?= json_encode($room['mode'], $JS_ENC) ?>,
 	maxChoice: <?= (int) $room['max_choice'] ?>,
 	allowChange: <?= (int) $room['allow_change'] ?>,
-	status: <?= json_encode($room['status']) ?>,
+	status: <?= json_encode($room['status'], $JS_ENC) ?>,
 	pollMs: <?= (int) $poll_ms ?>,
-	invite: <?= json_encode($is_invite ? array('token' => $invite['token'], 'nickname' => $invite['nickname']) : NULL) ?>
+	invite: <?= json_encode($is_invite ? array('token' => $invite['token'], 'nickname' => $invite['nickname']) : NULL, $JS_ENC) ?>
 };
 </script>
 <script defer src="<?= ds_asset('js/vote-room.js') ?>"></script>

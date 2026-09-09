@@ -83,3 +83,29 @@ defined('EXIT_USER_INPUT')     OR define('EXIT_USER_INPUT', 7); // invalid user 
 defined('EXIT_DATABASE')       OR define('EXIT_DATABASE', 8); // database error
 defined('EXIT__AUTO_MIN')      OR define('EXIT__AUTO_MIN', 9); // lowest automatically-assigned error code
 defined('EXIT__AUTO_MAX')      OR define('EXIT__AUTO_MAX', 125); // highest automatically-assigned error code
+
+/*
+|--------------------------------------------------------------------------
+| 애플리케이션 시간대
+|--------------------------------------------------------------------------
+|
+| php.ini 의 date.timezone 을 그대로 쓰면 안 된다. XAMPP 기본값이
+| 'Europe/Berlin' 이라서 PHP 시계만 7~8시간 뒤로 밀리고, MariaDB 의
+| NOW() (time_zone=SYSTEM = 한국) 와 사용자 벽시계는 그대로 남는다.
+| 그 결과 실제로 이렇게 깨졌다.
+|
+|   - t_vote_voters.voted_at (PHP date()) 이 같은 행의
+|     t_vote_rooms.created_at (DB CURRENT_TIMESTAMP) 보다 7시간 이르게
+|     찍혀서, 방이 만들어지기 전에 투표한 것처럼 보였다.
+|   - ds_time_ago() 가 DB 에서 온 created_at 을 PHP 시간대로 해석해
+|     오늘 만든 방을 전부 "방금", 3일 전 방을 "2일 전" 으로 표시했다.
+|   - 방장이 넣은 마감시각(브라우저 벽시계 기준)이 PHP 시계로 비교되어
+|     자동 마감이 7시간 늦게 걸렸다.
+|
+| DB 와 서버 OS 가 한국 시간이므로 PHP 도 같은 시간대로 맞춘다. 스키마가
+| DATETIME(시간대 없는 값)이라 세 시계가 같은 시간대를 봐야 한다.
+| 다른 지역에 배포하면 이 값만 바꾸면 된다.
+|
+*/
+defined('DS_TIMEZONE') OR define('DS_TIMEZONE', 'Asia/Seoul');
+date_default_timezone_set(DS_TIMEZONE);
