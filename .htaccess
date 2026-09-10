@@ -25,9 +25,18 @@
     ErrorDocument 404 /DINNERSPOT/index.php
 </IfModule>
 
-# 시스템/애플리케이션 디렉터리 직접 접근 차단
+# .sql / .log 직접 접근 차단.
+# Require 는 Apache 2.4 문법이다. 무료 공유 호스팅은 2.2 인 곳이 아직 있고,
+# 2.2 에서 Require 를 만나면 500 이 나면서 **사이트 전체가 죽는다.**
+# 그래서 모듈 유무로 갈라 쓴다.
 <FilesMatch "\.(sql|log)$">
-    Require all denied
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
 </FilesMatch>
 
 # 텍스트 응답 압축.

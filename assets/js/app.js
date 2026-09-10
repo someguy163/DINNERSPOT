@@ -315,6 +315,29 @@
 			if (parseInt(areaEl.value, 10) > 0) {
 				releasePoint(areaEl, '지역을 골랐으므로 위치 기준을 해제했습니다.');
 			}
+
+			/* 검색은 시/도를 넘나든다. 다른 시/도의 역을 고른 뒤 검색어를
+			   지우면 sync() 가 시/도 필터를 다시 걸어 그 역을 숨기고 선택을
+			   첫 항목으로 옮겨 버린다. 고른 역의 시/도로 맞춰 두면 그 일이
+			   일어나지 않는다. */
+			var cur = areaEl.selectedOptions[0];
+
+			if (cur && cur.dataset.sido && sidoEl.value !== cur.dataset.sido) {
+				sidoEl.value = cur.dataset.sido;
+
+				/* 필터를 반드시 다시 걸어야 한다.
+				 *
+				 * sync() 는 시/도에 맞지 않는 option 에 disabled 를 붙인다.
+				 * 검색(select-search.js)으로 **다른 시/도**의 역을 고르면 그
+				 * option 은 아직 disabled 인 채로 선택되고, 브라우저는 선택된
+				 * option 이 disabled 인 select 을 **아예 제출하지 않는다**.
+				 * 그래서 area_id 가 빠지고 기준점이 '전체' 로 떨어졌다
+				 * (실측: 병점역을 검색해 고르면 FormData 에 area_id 가 없음).
+				 *
+				 * keepSelection=true 로 부르면 방금 고른 역은 새 시/도에
+				 * 맞으므로 그대로 남고 disabled 만 풀린다. */
+				sync(true);
+			}
 		});
 
 		sync(true);

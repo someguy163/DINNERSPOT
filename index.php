@@ -53,7 +53,39 @@
  *
  * NOTE: If you change these, also change the error_reporting() code below
  */
-	define('ENVIRONMENT', isset($_SERVER['CI_ENV']) ? $_SERVER['CI_ENV'] : 'development');
+/* DINNERSPOT — 기본값을 development 에서 **자동 판정**으로 바꿨다.
+ *
+ * 왜: 공유 호스팅에는 환경 변수를 넣을 자리가 없는 곳이 많다. 기본값이
+ * development 인 채로 배포되면 오류 화면에 파일 경로 · SQL · 설정값이 그대로
+ * 찍힌다. 그래서 **로컬로 보이지 않으면 production 으로 닫는다.**
+ *
+ * CI_ENV 가 있으면 그것이 이긴다(호스팅이 SetEnv 를 지원하는 경우).
+ * CLI 는 개발자가 직접 돌리는 것이므로 development 로 둔다. */
+if ( ! defined('ENVIRONMENT'))
+{
+	if (isset($_SERVER['CI_ENV']) && $_SERVER['CI_ENV'] !== '')
+	{
+		define('ENVIRONMENT', $_SERVER['CI_ENV']);
+	}
+	elseif (PHP_SAPI === 'cli')
+	{
+		define('ENVIRONMENT', 'development');
+	}
+	else
+	{
+		$ds_h = isset($_SERVER['HTTP_HOST']) ? strtolower($_SERVER['HTTP_HOST']) : '';
+		$ds_h = preg_replace('/:\d+$/', '', $ds_h);
+
+		$ds_local = ($ds_h === 'localhost' || $ds_h === '127.0.0.1' || $ds_h === '::1'
+			|| substr($ds_h, -6) === '.local'
+			|| preg_match('/^10\./', $ds_h)
+			|| preg_match('/^192\.168\./', $ds_h)
+			|| preg_match('/^172\.(1[6-9]|2\d|3[01])\./', $ds_h));
+
+		define('ENVIRONMENT', $ds_local ? 'development' : 'production');
+		unset($ds_h, $ds_local);
+	}
+}
 
 /*
  *---------------------------------------------------------------

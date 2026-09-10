@@ -11,6 +11,11 @@
 <script>window.DS_BASE = <?= json_encode(base_url()) ?>;</script>
 <!-- defer: head 에서 먼저 예약되어 본문의 페이지 스크립트보다 항상 먼저 실행된다 -->
 <script defer src="<?= ds_asset('js/app.js') ?>"></script>
+<?php
+// app.js **다음** 이어야 한다. defer 는 순서를 지키므로, app.js 의 sync() 가
+// 시/도 필터를 먼저 걸어 놓은 상태에서 드롭다운이 목록을 읽는다.
+?>
+<script defer src="<?= ds_asset('js/select-search.js') ?>"></script>
 </head>
 <body class="<?= h($body_class) ?>">
 

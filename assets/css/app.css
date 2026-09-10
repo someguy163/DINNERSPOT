@@ -203,6 +203,131 @@ pre code { overflow-wrap: normal; }
 
 .blank input.w-num { width: 3.6em; text-align: center; }
 
+/* ---------- 검색칸이 달린 드롭다운 (select-search.js) ----------
+   지역 사전이 632곳이라 기본 select 로는 찾을 수 없다. <select> 안에는
+   검색칸을 넣을 수 없으므로 목록만 직접 그린다. 원래 select 는 폼 제출과
+   JS 없는 환경을 위해 남겨 두고 화면에서만 감춘다. */
+.dsel { position: relative; display: inline-block; vertical-align: baseline; }
+
+/* 씌우기에 성공했을 때만 원래 select 를 감춘다.
+   (JS 가 죽으면 이 클래스가 붙지 않아 select 가 그대로 보인다) */
+select.dsel-native {
+	position: absolute;
+	width: 1px; height: 1px;
+	margin: -1px; padding: 0; border: 0;
+	clip: rect(0 0 0 0);
+	clip-path: inset(50%);
+	overflow: hidden;
+	white-space: nowrap;
+}
+
+/* 문장 안의 빈칸처럼 보이게 — .blank select 과 같은 외형 */
+.dsel-btn {
+	appearance: none;
+	-webkit-appearance: none;
+	background: var(--steel-2);
+	border: 0;
+	border-bottom: 2.5px solid var(--char);
+	border-radius: var(--r-sm) var(--r-sm) 0 0;
+	padding: 2px 26px 2px 10px;
+	font: inherit;
+	font-weight: 800;
+	letter-spacing: -.02em;
+	color: var(--char);
+	cursor: pointer;
+	max-width: 100%;
+	text-align: left;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.dsel-btn:hover { background: #E9E6DF; }
+
+/* 화살표. .blank::after 와 같은 자리 */
+.dsel::after {
+	content: '';
+	position: absolute;
+	right: 10px; top: 50%;
+	width: 7px; height: 7px;
+	margin-top: -5px;
+	border-right: 2px solid var(--char);
+	border-bottom: 2px solid var(--char);
+	transform: rotate(45deg);
+	pointer-events: none;
+}
+
+.dsel-panel {
+	position: absolute;
+	z-index: 60;
+	top: calc(100% + 4px);
+	left: 0;
+	width: 17em;
+	/* 화면을 넘을 수 없게 CSS 로도 묶는다. JS 의 위치 보정(place)이 한 프레임
+	   늦거나 폰트가 늦게 올라와도 가로 스크롤이 생기지 않게 하는 안전장치다. */
+	max-width: calc(100vw - 24px);
+	background: #fff;
+	border: 2px solid var(--char);
+	border-radius: var(--r-sm);
+	box-shadow: 0 10px 28px rgba(0,0,0,.18);
+	padding: 8px;
+}
+
+.dsel-q {
+	appearance: none;
+	-webkit-appearance: none;
+	width: 100%;
+	box-sizing: border-box;
+	background: var(--steel-2);
+	border: 0;
+	border-bottom: 2px solid var(--char);
+	border-radius: var(--r-sm) var(--r-sm) 0 0;
+	padding: 7px 10px;
+	font: inherit;
+	font-size: 15px;
+	font-weight: 700;
+	color: var(--char);
+}
+
+.dsel-q:focus { outline: 2px solid var(--ember, #C2410C); outline-offset: 1px; }
+
+.dsel-list {
+	list-style: none;
+	margin: 6px 0 0;
+	padding: 0;
+	max-height: 15em;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+}
+
+.dsel-item {
+	padding: 6px 9px;
+	border-radius: var(--r-sm);
+	font-size: 15px;
+	font-weight: 700;
+	color: var(--char);
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.dsel-item:hover,
+.dsel-item.is-active { background: var(--steel-2); }
+.dsel-item[aria-selected="true"] { box-shadow: inset 0 0 0 2px var(--char); }
+
+.dsel-empty {
+	margin: 8px 4px 2px;
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--muted-2);
+}
+
+@media (max-width: 480px) {
+	.dsel-panel { width: 15em; }
+	.dsel-list  { max-height: 12em; }
+}
+
 .blank select:hover,
 .blank input:hover { background: #E9E6DF; }
 

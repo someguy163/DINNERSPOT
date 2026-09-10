@@ -35,8 +35,10 @@ foreach ($meta['categories'] as $cat)
 				<?php if ($result['total_pages'] > 1): ?>
 					<span class="num"><b><?= (int) $result['page'] ?></b> / <?= (int) $result['total_pages'] ?> 페이지</span>
 				<?php endif; ?>
-				<span><b><?= (int) $c['headcount'] ?>명</b></span>
-				<span>1인 <b><?= h(ds_won($c['budget'])) ?></b></span>
+				<span><b><?= ((int) $c['headcount'] > 0) ? ((int) $c['headcount'] . '명') : '인원 무관' ?></b></span>
+				<span><?= ((int) $c['budget'] > 0)
+					? ('1인 <b>' . h(ds_won($c['budget'])) . '</b>')
+					: '<b>예산 무관</b>' ?></span>
 				<span>반경 <b><?= $c['radius'] >= 1000 ? (($c['radius'] / 1000) . 'km') : ($c['radius'] . 'm') ?></b></span>
 				<span><b><?= h($purpose) ?></b></span>
 				<?php if ($cat_labels): ?><span><b><?= h(implode(', ', $cat_labels)) ?></b></span><?php endif; ?>
@@ -79,7 +81,8 @@ foreach ($meta['categories'] as $cat)
 				'meta' => $meta, 'sel_area_id' => (int) $c['area_id'],
 				'sel_coords' => $origin_is_point, 'uid' => 'e', 'suffix' => '근처에서'), TRUE) ?>
 			<span class="nw"><span class="blank no-caret">
-				<input type="number" class="w-num" name="headcount" min="1" max="300" value="<?= (int) $c['headcount'] ?>" aria-label="인원">
+				<input type="number" class="w-num" name="headcount" min="0" max="300" value="<?= ((int) $c['headcount'] > 0) ? (int) $c['headcount'] : '' ?>" placeholder="무관"
+				       aria-label="인원 (0 이면 인원 무관)" title="0 을 넣으면 인원을 따지지 않습니다">
 			</span> 명이,</span> 1인당
 			<span class="nw"><span class="blank">
 				<select name="budget" aria-label="예산">

@@ -54,6 +54,35 @@ class Admin extends MY_Controller {
 		return (string) $this->config->item('admin_password', 'dinnerspot');
 	}
 
+	/**
+	 * 입력한 비밀번호가 맞는지.
+	 *
+	 * 설정값이 password_hash() 로 만든 해시면 password_verify 로 검사한다.
+	 * 공개 서버에 올릴 때는 반드시 해시를 써야 한다 — 평문을 설정 파일에
+	 * 두면 그 파일이 읽히는 순간(백업 · 오설정 · 다른 취약점) 그대로 노출된다.
+	 * 해시는 tools/admin_hash.php 로 만든다.
+	 *
+	 * 로컬 개발에서는 평문이 편하므로 둘 다 받는다. 평문일 때도
+	 * hash_equals 로 비교해 길이·내용에 따른 시간차를 남기지 않는다.
+	 */
+	protected function password_matches($input)
+	{
+		$stored = $this->admin_password();
+
+		if ($stored === '')
+		{
+			return FALSE;
+		}
+
+		// password_hash() 결과는 $2y$ · $argon2i$ · $argon2id$ 등으로 시작한다
+		if (preg_match('/^\$(2[aby]|argon2(i|id|d))\$/', $stored) === 1)
+		{
+			return password_verify($input, $stored);
+		}
+
+		return hash_equals($stored, $input);
+	}
+
 	/** 비밀번호가 설정되지 않았으면 관리자 기능 전체를 없는 것처럼 취급한다 */
 	protected function require_enabled()
 	{
@@ -403,8 +432,9 @@ class Admin extends MY_Controller {
 				$pw = $this->input->post('password', FALSE);
 				$pw = is_scalar($pw) ? (string) $pw : '';
 
-				// 타이밍 공격 방지를 위해 hash_equals 로 비교한다
-				if (hash_equals($this->admin_password(), $pw))
+				// 해시가 설정되어 있으면 password_verify, 아니면 평문 비교.
+				// 평문 비교에는 타이밍 공격 방지를 위해 hash_equals 를 쓴다.
+				if ($this->password_matches($pw))
 				{
 					$this->login_ok($ip);
 

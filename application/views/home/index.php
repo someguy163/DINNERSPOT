@@ -25,7 +25,8 @@ foreach ($meta['purposes'] as $p)
 
 				<span class="nw"><span class="blank no-caret">
 					<input type="number" class="w-num" name="headcount" id="f-head"
-					       min="1" max="300" value="<?= (int) $d['headcount'] ?>" aria-label="인원">
+					       min="0" max="300" value="<?= ((int) $d['headcount'] > 0) ? (int) $d['headcount'] : '' ?>" placeholder="무관"
+					       aria-label="인원 (0 이면 인원 무관)" title="0 을 넣으면 인원을 따지지 않습니다">
 				</span> 명이,</span> 1인당
 				<span class="nw"><span class="blank">
 					<select name="budget" aria-label="1인 예산">
@@ -40,11 +41,18 @@ foreach ($meta['purposes'] as $p)
 				<span class="nw"><span class="blank">
 					<select name="purpose" aria-label="목적">
 						<?php foreach ($meta['purposes'] as $p): ?>
-							<option value="<?= h($p['code']) ?>" title="<?= h($p['desc']) ?>"><?= h($p['label']) ?></option>
+							<option value="<?= h($p['code']) ?>" title="<?= h($p['desc']) ?>"
+							        <?= ($p['code'] === $d['purpose']) ? 'selected' : '' ?>><?= h($p['label']) ?></option>
 						<?php endforeach; ?>
 					</select>
 				</span> 할</span> 만한 곳을 찾습니다.
 			</div>
+
+			<p style="margin:14px 0 0;color:var(--muted-2);font-size:14px;font-weight:500;line-height:1.65">
+				<b>조건을 빼고 전체에서 찾을 수도 있습니다.</b>
+				인원에 <b>0</b>, 예산은 <b>얼마든</b>, 목적은 <b>무엇이든</b> 을 고르면
+				그 조건은 점수 계산에서 아예 빠집니다 — 나머지 조건만으로 순위를 냅니다.
+			</p>
 
 			<?php if (isset($purpose_desc['date'])): ?>
 				<p style="margin:14px 0 0;color:var(--muted-2);font-size:14px;font-weight:500;line-height:1.65">

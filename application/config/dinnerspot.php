@@ -110,11 +110,28 @@ $config['score_weights'] = array(
 	'category' => 7,    // 선택한 음식 종류 일치
 );
 
-/* 검색 기본값 */
+/* -----------------------------------------------------------------
+ |  검색 기본값
+ |
+ |  인원 · 예산 · 목적의 기본값은 **"조건을 안 본다"** 로 두었다.
+ |  처음 들어온 사람에게 좁혀진 결과를 주는 대신 전체를 보여주고,
+ |  좁히고 싶으면 문장에서 고르게 한다.
+ |
+ |    default_headcount = 0    -> capacity 가중치를 0 으로 (인원 무관)
+ |    default_budget    = 0    -> budget 가중치를 0 으로 (예산 무관)
+ |    default_purpose   = any  -> 목적 가중치·선호·회피를 쓰지 않음
+ |
+ |  ★ 0 을 쓸 수 있으려면 읽는 쪽이 `?:` 가 아니라 `=== NULL` 로 판정해야 한다.
+ |    (Recommender::normalize_criteria 의 $cfg, Spot_service::cfg 가 그렇게 되어 있다.
+ |     `?:` 로 되돌리면 0 이 falsy 라서 이 설정이 조용히 무시된다.)
+ |
+ |  좁혀진 화면을 기본으로 하고 싶으면 6 / 25000 / 'team' 으로 돌리면 된다.
+ | ----------------------------------------------------------------- */
 $config['default_radius']    = 800;   // m
 $config['radius_options']    = array(300, 500, 800, 1500, 3000);
-$config['default_headcount'] = 6;
-$config['default_budget']    = 25000;
+$config['default_headcount'] = 0;       // 0 = 인원 무관
+$config['default_budget']    = 0;       // 0 = 예산 무관
+$config['default_purpose']   = 'any';   // any = 목적 무관 ('team' 등으로 바꿀 수 있다)
 /*
  | 결과 목록의 크기.
  |
@@ -132,7 +149,11 @@ $config['per_page']          = 10;
 $config['result_limit']      = 200;
 
 /* 예산 구간 프리셋 (원) */
+/* value 0 은 "예산을 따지지 않는다" 는 뜻이다. Recommender 가 그 항목의
+ * 가중치를 0 으로 만들어 점수 계산에서 아예 뺀다. 문장형 화면에서
+ * "1인당 얼마든 으로" 로 읽히도록 라벨을 골랐다. */
 $config['budget_presets'] = array(
+	array('label' => '얼마든',       'value' => 0),
 	array('label' => '1만원 이하',   'value' => 10000),
 	array('label' => '1~2만원',      'value' => 15000),
 	array('label' => '2~3만원',      'value' => 25000),

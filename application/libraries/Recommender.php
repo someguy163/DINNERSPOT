@@ -37,6 +37,19 @@ class Recommender {
 	 *  needs  : 사실상 필수로 보는 편의옵션
 	 */
 	protected $purposes = array(
+		/* 목적을 따지지 않는 선택지.
+		 * weight 가 비어 있으면 weights_for() 가 배수를 곱하지 않고,
+		 * prefer/avoid 가 비어 있으면 purpose_bonus() 가 0 을 준다.
+		 * needs 가 비어 있으니 need_room/need_late 도 강제하지 않는다.
+		 * 그래서 이 항목은 다른 코드를 고치지 않고도 "가중치 없음" 이 된다. */
+		'any' => array(
+			'label'  => '무엇이든',
+			'desc'   => '목적에 따른 가점·감점 없이 거리·예산·인원만으로',
+			'weight' => array(),
+			'prefer' => array(),
+			'avoid'  => array(),
+			'needs'  => array(),
+		),
 		'team' => array(
 			'label'  => '팀 회식',
 			'desc'   => '적당한 예산에 다 같이 앉을 수 있는 곳',
@@ -129,7 +142,14 @@ class Recommender {
 	 */
 	public function normalize_criteria($input)
 	{
-		$cfg = function ($k, $d) { return $this->CI->config->item($k, 'dinnerspot') ?: $d; };
+		/* ?: 를 쓰면 안 된다 — 설정값 0 이 falsy 라서 기본값으로 되돌아간다.
+		 * default_headcount / default_budget 에 0("이 조건을 안 본다")을 넣을 수
+		 * 있어야 하므로, 값이 없을 때(NULL)만 기본값을 쓴다. */
+		$cfg = function ($k, $d) {
+			$v = $this->CI->config->item($k, 'dinnerspot');
+
+			return ($v === NULL) ? $d : $v;
+		};
 
 		// 쿼리스트링은 어떤 키든 배열로 만들 수 있다(`?purpose[]=team`).
 		// 배열을 그대로 (string)/trim() 에 넘기면 PHP 8 에서 경고나 TypeError 가
@@ -148,7 +168,9 @@ class Recommender {
 			'radius'     => (int) $in('radius', (int) $cfg('default_radius', 800)),
 			'headcount'  => (int) $in('headcount', (int) $cfg('default_headcount', 6)),
 			'budget'     => (int) $in('budget', (int) $cfg('default_budget', 25000)),
-			'purpose'    => (string) $in('purpose', 'team'),
+			// 목적의 기본값도 설정에서 읽는다. 화면 기본값(form_meta)과 어긋나면
+			// purpose 없는 요청과 폼 첫 화면이 서로 다른 결과를 낸다.
+			'purpose'    => (string) $in('purpose', (string) $cfg('default_purpose', 'team')),
 			'categories' => array(),
 			// 자유 입력 키워드가 지목한 업종 코드. 점수용 소프트 신호이며
 			// Spot_service 가 Place_model::codes_matching_keyword() 로 채운다
@@ -211,8 +233,12 @@ class Recommender {
 		}
 
 		$c['radius']    = max(200, min(10000, $c['radius']));
-		$c['headcount'] = max(1, min(300, $c['headcount']));
-		$c['budget']    = max(3000, min(500000, $c['budget']));
+
+		/* 0 은 "이 조건을 따지지 않는다" 는 뜻이다 (화면의 인원 0 · 예산 '얼마든').
+		 * 클램프에 그대로 넣으면 1 과 3000 으로 올라가 무관이 사라지므로
+		 * 0 일 때만 건너뛴다. 음수는 입력으로 들어올 수 있으니 0 으로 눕힌다. */
+		$c['headcount'] = ($c['headcount'] <= 0) ? 0 : max(1, min(300, $c['headcount']));
+		$c['budget']    = ($c['budget']    <= 0) ? 0 : max(3000, min(500000, $c['budget']));
 		$c['page']      = max(1, min(1000, $c['page']));
 		$c['per_page']  = max(5, min(50, $c['per_page']));
 
@@ -376,6 +402,15 @@ class Recommender {
 	protected function score_budget($p, $criteria)
 	{
 		$price  = (int) $p['avg_price'];
+
+		/* 예산 무관(0). weights_for() 가 이 항목 가중치를 0 으로 만들어 점수에는
+		 * 영향이 없지만, max(1, 0) 으로 계산하면 ratio 가 폭주해 score_parts 에
+		 * 0(최악)이 찍힌다. API 를 보는 쪽에 거짓이 되므로 중립값을 준다. */
+		if ((int) $criteria['budget'] === 0)
+		{
+			return 50;
+		}
+
 		$budget = max(1, (int) $criteria['budget']);
 
 		if ($price <= 0)
@@ -406,7 +441,14 @@ class Recommender {
 	/** 인원 수용 */
 	protected function score_capacity($p, $criteria)
 	{
-		$max  = (int) $p['max_party'];
+		$max = (int) $p['max_party'];
+
+		// 인원 무관(0). 위 score_budget 과 같은 이유로 중립값을 준다.
+		if ((int) $criteria['headcount'] === 0)
+		{
+			return 50;
+		}
+
 		$head = max(1, (int) $criteria['headcount']);
 
 		if ($max <= 0)
@@ -567,9 +609,11 @@ class Recommender {
 			return FALSE;
 		}
 
-		$max = (int) $p['max_party'];
+		$max  = (int) $p['max_party'];
+		$head = (int) $criteria['headcount'];
 
-		if ($max > 0 && $max < (int) $criteria['headcount'])
+		// 인원 무관(0)이면 수용인원으로 걸러내지 않는다
+		if ($head > 0 && $max > 0 && $max < $head)
 		{
 			return FALSE;
 		}
@@ -654,15 +698,18 @@ class Recommender {
 
 		// 추정 가격으로 "예산에 딱 맞음" 이라고 단언하면 거짓말이 된다.
 		// 실측값일 때만 단언하고, 추정값이면 업종 평균이라는 걸 밝힌다.
-		if ($price > 0 && $verified && $parts['budget'] >= 90)
+		// 예산 무관이면 "예산에 딱 맞음" 같은 말을 붙일 근거가 없다.
+		$has_budget = ((int) $criteria['budget'] > 0);
+
+		if ($has_budget && $price > 0 && $verified && $parts['budget'] >= 90)
 		{
 			$out[] = '예산에 딱 맞음';
 		}
-		elseif ($price > 0 && $verified && $price < $criteria['budget'] * 0.75)
+		elseif ($has_budget && $price > 0 && $verified && $price < $criteria['budget'] * 0.75)
 		{
 			$out[] = '예산보다 저렴';
 		}
-		elseif ($price > 0 && ! $verified && $price <= $criteria['budget'])
+		elseif ($has_budget && $price > 0 && ! $verified && $price <= $criteria['budget'])
 		{
 			$out[] = '업종 평균 기준 예산 내';
 		}
@@ -677,7 +724,15 @@ class Recommender {
 		$max  = (int) $p['max_party'];
 		$head = (int) $criteria['headcount'];
 
-		if ($max > 0 && $max >= $head * 1.5)
+		// 인원 무관이면 head 가 0 이라 "0명 가능" 이 된다. 대신 수용 규모만 알린다.
+		if ($head <= 0)
+		{
+			if ($max > 0)
+			{
+				$out[] = '최대 ' . $max . '명';
+			}
+		}
+		elseif ($max > 0 && $max >= $head * 1.5)
 		{
 			$out[] = $head . '명 넉넉히 수용';
 		}
@@ -726,6 +781,20 @@ class Recommender {
 					$w[$k] = $w[$k] * $mul;
 				}
 			}
+		}
+
+		/* 무관으로 고른 조건은 **가중치를 0 으로 만들어 분모에서도 뺀다.**
+		 * 중립 점수(예: 50)를 주는 방식은 분모에 그대로 남아 나머지 항목의
+		 * 차이를 눌러 버린다 — 0 으로 두면 rank() 의 $sum / $total_w 가
+		 * 남은 항목만으로 다시 정규화된다. */
+		if (isset($criteria['budget']) && (int) $criteria['budget'] === 0)
+		{
+			$w['budget'] = 0;
+		}
+
+		if (isset($criteria['headcount']) && (int) $criteria['headcount'] === 0)
+		{
+			$w['capacity'] = 0;
 		}
 
 		if ( ! empty($criteria['categories']))

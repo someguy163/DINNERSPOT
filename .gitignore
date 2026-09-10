@@ -44,6 +44,10 @@ user_guide_src/cilexer/pycilexer.egg-info/*
 /scratch/
 *.bak
 
+# 배포용으로 만들어지는 사본. 정본은 sql/ 이다
+# (tools/export_hosted_sql.php 가 만든다)
+/dist/
+
 # DB 백업 덤프 (README 의 mysqldump 안내로 만들어지는 파일)
 /*_backup.sql
 /dump*.sql

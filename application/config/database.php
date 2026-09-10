@@ -94,3 +94,43 @@ $db['default'] = array(
 	'failover' => array(),
 	'save_queries' => TRUE
 );
+
+/* -----------------------------------------------------------------
+ |  배포지 접속 정보 덮어쓰기
+ |
+ |  공유 호스팅은 DB 이름 · 계정 · 비밀번호를 업체가 정해서 준다
+ |  (예: epiz_12345678 / epiz_12345678_dinnerspot). 그 값을 이 파일에 적으면
+ |  **git 에 올라간다.** 그래서 이미 .gitignore 로 빠져 있는 비밀 파일
+ |  application/config/dinnerspot_local.php 에서 읽어 덮어쓴다.
+ |
+ |  그 파일에 이렇게 적으면 된다 (없으면 위 기본값을 그대로 쓴다):
+ |
+ |      $config['db_hostname'] = 'sqlXXX.epizy.com';
+ |      $config['db_username'] = 'epiz_12345678';
+ |      $config['db_password'] = '비밀번호';
+ |      $config['db_database'] = 'epiz_12345678_dinnerspot';
+ |
+ |  ★ DB 이름을 바꾸면 sql/*.sql 의 `USE` 도 같이 맞춰야 한다.
+ |    tools/export_hosted_sql.php 가 그 두 줄을 떼어낸 파일을 만들어 준다.
+ | ----------------------------------------------------------------- */
+$ds_secret = APPPATH . 'config/dinnerspot_local.php';
+
+if (is_file($ds_secret))
+{
+	// 그 파일은 $config[...] 에 값을 담는다. 이 파일의 $db 와 섞이지 않게
+	// 지역 변수로 받아서 필요한 것만 옮긴다.
+	$config = array();
+	include $ds_secret;
+
+	foreach (array('hostname', 'username', 'password', 'database') as $ds_k)
+	{
+		if (isset($config['db_' . $ds_k]) && $config['db_' . $ds_k] !== '')
+		{
+			$db['default'][$ds_k] = $config['db_' . $ds_k];
+		}
+	}
+
+	unset($config, $ds_k);
+}
+
+unset($ds_secret);

@@ -14,6 +14,16 @@
  * 역 <option> 은 전부 출력하고 data-sido 로 표시 여부만 JS 가 조절한다.
  * JS 가 죽어도 전체 목록에서 고를 수 있다.
  *
+ * 두 select 에 붙은 .js-searchable 은 select-search.js 가 읽는다. 그 스크립트가
+ * 검색칸이 달린 드롭다운을 씌우고, 고른 값은 이 <select> 에 그대로 써서
+ * change 를 쏜다 — 그래서 app.js 의 sync()/releasePoint 와 폼 제출은 손대지
+ * 않는다. JS 가 죽으면 씌우지 않으므로 원래 select 가 그대로 남는다.
+ *
+ * data-search-cross="1" (역 select) 은 "검색할 때는 시/도 필터를 무시하고
+ * 전체에서 훑으라" 는 뜻이다 — 신촌역이 어느 시/도인지 모르는 채로 찾는 것이
+ * 검색의 존재 이유다. 이름이 겹치는 경우가 실제로 있어(운천역 = 경기·광주)
+ * 검색 결과에는 시/도를 함께 보여준다.
+ *
  * 조사는 뷰가 아니라 이 partial 이 묶는다. 두 select 를 통째로 .nw 로 감싸면
  * 역 select 이 가장 긴 역 이름만큼(=200px 남짓) 벌어져 375px 에서 페이지가 가로로 밀린다.
  * 시/도와 역 사이는 끊어지게 두고, "역 select + 조사" 만 nowrap 으로 묶는다.
@@ -45,7 +55,8 @@ if ($sel_sido === '' && ! empty($groups))
 }
 ?>
 <span class="blank">
-	<select class="js-sido" data-target="<?= h($uid) ?>-area" aria-label="시/도">
+	<select class="js-sido js-searchable" id="<?= h($uid) ?>-sido" data-target="<?= h($uid) ?>-area"
+	        data-search-label="시/도 검색" aria-label="시/도">
 		<?php foreach ($groups as $g): ?>
 			<option value="<?= h($g['sido']) ?>" <?= ($g['sido'] === $sel_sido) ? 'selected' : '' ?>>
 				<?= h($g['sido']) ?> (<?= (int) $g['count'] ?>)
@@ -54,7 +65,8 @@ if ($sel_sido === '' && ! empty($groups))
 	</select>
 </span>
 <span class="nw"><span class="blank">
-	<select name="area_id" id="<?= h($uid) ?>-area" class="js-area" aria-label="역 · 상권">
+	<select name="area_id" id="<?= h($uid) ?>-area" class="js-area js-searchable"
+	        data-search-label="역 이름으로 검색" data-search-cross="1" aria-label="역 · 상권">
 		<?php
 		// "내 위치" 나 지도로 지점을 직접 찍으면 더 이상 "역" 을 검색하는 게
 		// 아니라 한 지점을 검색하는 것이므로 area_id 를 0 으로 비워야 한다.
@@ -90,6 +102,7 @@ if ($sel_sido === '' && ! empty($groups))
 				?>
 				<option value="<?= (int) $a['id'] ?>"
 				        data-sido="<?= h($g['sido']) ?>"
+				        data-name="<?= h($a['name']) ?>"
 				        data-lat="<?= h($a['lat']) ?>"
 				        data-lng="<?= h($a['lng']) ?>"
 				        <?= ((int) $a['id'] === $sel_area_id) ? 'selected' : '' ?>

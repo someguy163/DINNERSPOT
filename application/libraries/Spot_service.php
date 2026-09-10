@@ -475,15 +475,16 @@ class Spot_service {
 
 		// 목적별 보조 질의
 		$by_purpose = array(
+			'any'    => array(),   // 목적 무관 — 아래 업종 풀로만 넓게 훑는다
 			'team'   => array('회식', '고기집', '단체'),
 			'client' => array('한정식', '룸식당', '접대'),
-			'cheap'  => array('맛집', '가성비', '백반'),
+			'cheap'  => array('가성비', '백반'),
 			'after'  => array('술집', '호프', '포차'),
 			'quiet'  => array('룸식당', '조용한 식당', '개별룸'),
-			'date'   => array('맛집', '분위기 좋은', '카페', '데이트'),
+			'date'   => array('분위기 좋은', '카페', '데이트'),
 		);
 
-		$extra = isset($by_purpose[$c['purpose']]) ? $by_purpose[$c['purpose']] : array('맛집');
+		$extra = isset($by_purpose[$c['purpose']]) ? $by_purpose[$c['purpose']] : array();
 
 		foreach ($extra as $e)
 		{
@@ -491,6 +492,34 @@ class Spot_service {
 		}
 
 		$queries[] = $base . ' 맛집';
+
+		/* 업종 풀을 덧붙인다.
+		 *
+		 * 지역검색 API 는 **호출당 정확히 5건**만 주고 start 파라미터가 무시된다
+		 * (실측: display=30 · start=6 · start=11 모두 같은 5건, total=5).
+		 * 그래서 건수를 늘리는 방법은 "질의를 다르게 던지는 것" 뿐이다.
+		 *
+		 * 병점역 실측 — 목적 질의 4개로는 13곳, 업종 풀까지 19개를 던지면 53곳.
+		 * 아래 순서는 그 실측에서 새로 나온 곳이 많은 순이다
+		 * (중국집·치킨·횟집·분식 각 +5, 국밥·술집·카페·일식·양식 각 +3).
+		 * '한식'·'찌개'·'식당' 은 새것이 0곳이라 뺐다 — 앞선 질의와 겹친다.
+		 *
+		 * 실제로 몇 개를 던질지는 naver_max_queries 가 자른다(호출 1회 = 질의 1개).
+		 */
+		$pool = $this->cfg('naver_query_pool', array(
+			'중국집', '치킨', '횟집', '분식', '국밥', '술집', '일식', '양식',
+			'카페', '삼겹살', '고기집', '뷔페', '곱창',
+		));
+
+		foreach ((array) $pool as $kw)
+		{
+			$kw = trim((string) $kw);
+
+			if ($kw !== '')
+			{
+				$queries[] = $base . ' ' . $kw;
+			}
+		}
 
 		return array_values(array_unique($queries));
 	}
@@ -569,6 +598,10 @@ class Spot_service {
 				'radius'    => (int) $this->cfg('default_radius', 800),
 				'headcount' => (int) $this->cfg('default_headcount', 6),
 				'budget'    => (int) $this->cfg('default_budget', 25000),
+				/* 홈 화면의 목적 select 이 "첫 번째 항목이 기본" 에 의존하지
+				 * 않게 기본값을 명시한다. 목적 목록 맨 앞에 '무엇이든' 을
+				 * 넣었으므로, 이게 없으면 기본이 조용히 바뀐다. */
+				'purpose'   => (string) $this->cfg('default_purpose', 'team'),
 			),
 			'naver_enabled'  => $this->CI->naver_local->is_enabled(),
 			'map_key'        => (string) $this->cfg('naver_map_key_id', ''),
