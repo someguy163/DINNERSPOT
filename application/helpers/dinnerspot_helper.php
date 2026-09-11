@@ -154,6 +154,50 @@ if ( ! function_exists('ds_locality_hint'))
 	}
 }
 
+if ( ! function_exists('ds_link_label'))
+{
+	/**
+	 * 네이버가 준 link(=homepage) 가 실제로 무엇인지 이름 붙인다.
+	 *
+	 * 이 값을 전부 "홈페이지" 라고 부르면 거짓이 된다 — 실측하면 링크가 있는
+	 * 326곳 중 인스타그램 102 · 네이버블로그 33 · 캐치테이블 32 이고, 가게가
+	 * 직접 운영하는 홈페이지는 오히려 적다. 누르기 전에 어디로 가는지 알려준다.
+	 */
+	function ds_link_label($url)
+	{
+		$host = strtolower((string) parse_url((string) $url, PHP_URL_HOST));
+
+		if ($host === '')
+		{
+			return '홈페이지';
+		}
+
+		$map = array(
+			'instagram.com'   => '인스타그램',
+			'blog.naver.com'  => '네이버 블로그',
+			'cafe.naver.com'  => '네이버 카페',
+			'catchtable.co.kr'=> '예약 · 캐치테이블',
+			'tabling.co.kr'   => '예약 · 테이블링',
+			'youtube.com'     => '유튜브',
+			'youtu.be'        => '유튜브',
+			'facebook.com'    => '페이스북',
+			'smartstore.naver.com' => '네이버 스마트스토어',
+			'booking.naver.com'    => '네이버 예약',
+		);
+
+		foreach ($map as $needle => $label)
+		{
+			// app.catchtable.co.kr 처럼 앞에 뭔가 붙어도 잡히게 끝을 맞춰 본다
+			if ($host === $needle OR substr($host, -strlen('.' . $needle)) === '.' . $needle)
+			{
+				return $label;
+			}
+		}
+
+		return '홈페이지';
+	}
+}
+
 if ( ! function_exists('ds_naver_map_url'))
 {
 	/**

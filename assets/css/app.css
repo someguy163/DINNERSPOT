@@ -203,6 +203,37 @@ pre code { overflow-wrap: normal; }
 
 .blank input.w-num { width: 3.6em; text-align: center; }
 
+/* ---------- 네이버로 건너가는 블록 (장소 상세) ----------
+   네이버 지역검색 API 에 메뉴·사진·영업시간이 없어서, 없는 것을 지어내는 대신
+   어디에 있는지 알려주고 한 번에 넘어가게 한다. 기본 정보 패널과 같은 모양이면
+   그냥 지나치므로 왼쪽에 잉걸색 띠를 둬서 "여기서 나간다" 는 신호를 준다. */
+.more-naver {
+	border-left: 3px solid var(--ember);
+}
+
+.more-naver p {
+	margin: 0 0 16px;
+	color: var(--muted);
+	max-width: 62ch;
+	line-height: 1.7;
+}
+
+.more-naver p b { color: var(--char); font-weight: 700; }
+
+.more-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+/* 가게 이름이 버튼에 들어가므로 좁은 화면에서 넘칠 수 있다 */
+.more-actions .btn {
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 /* ---------- 검색칸이 달린 드롭다운 (select-search.js) ----------
    지역 사전이 632곳이라 기본 select 로는 찾을 수 없다. <select> 안에는
    검색칸을 넣을 수 없으므로 목록만 직접 그린다. 원래 select 는 폼 제출과

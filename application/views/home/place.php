@@ -21,18 +21,23 @@ $has_geo = ( ! empty($place['lat']) && ! empty($place['lng']));
 			<?php endif; ?>
 		</p>
 
-		<div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap">
-			<a class="btn btn-ember" target="_blank" rel="noopener"
-			   href="<?= h(ds_naver_map_url($place['name'], $place['address'] ?: $place['road_address'])) ?>">
-				네이버 지도에서 열기
-			</a>
-			<?php if ($place['phone']): ?>
-				<a class="btn btn-ghost" href="tel:<?= h($place['phone']) ?>"><?= h($place['phone']) ?></a>
-			<?php endif; ?>
-			<?php if ($place['homepage']): ?>
-				<a class="btn btn-ghost" href="<?= h($place['homepage']) ?>" target="_blank" rel="noopener">홈페이지</a>
-			<?php endif; ?>
-		</div>
+		<?php
+		/* 네이버 지도 버튼은 아래 "메뉴 · 사진 · 영업시간" 블록에 하나만 둔다.
+		 * 위아래로 같은 버튼이 두 번 있으면 무엇이 주된 행동인지 흐려진다.
+		 * 여기에는 이 가게에만 있는 것(전화 · 인스타그램 등)만 남긴다. */
+		?>
+		<?php if ($place['phone'] OR $place['homepage']): ?>
+			<div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap">
+				<?php if ($place['phone']): ?>
+					<a class="btn btn-ghost" href="tel:<?= h($place['phone']) ?>"><?= h($place['phone']) ?></a>
+				<?php endif; ?>
+				<?php if ($place['homepage']): ?>
+					<?php // 이 링크는 대개 홈페이지가 아니라 인스타그램·블로그·예약 페이지다 ?>
+					<a class="btn btn-ghost" href="<?= h($place['homepage']) ?>"
+					   target="_blank" rel="noopener"><?= h(ds_link_label($place['homepage'])) ?></a>
+				<?php endif; ?>
+			</div>
+		<?php endif; ?>
 	</section>
 
 	<?php if ($has_geo && $map_key !== ''): ?>
@@ -98,6 +103,27 @@ $has_geo = ( ! empty($place['lat']) && ! empty($place['lng']));
 		<?php if ($place['memo']): ?>
 			<p class="notice" style="margin-bottom:0"><?= h($place['memo']) ?></p>
 		<?php endif; ?>
+	</div>
+
+	<?php
+	/* 네이버 지역검색 API 는 이 아홉 개만 준다 —
+	 *   title / link / category / description / telephone / address / roadAddress / mapx / mapy
+	 * 메뉴 · 사진 · 영업시간 · 리뷰는 아예 오지 않는다. 위 "1인 예상" 과
+	 * "수용 인원" 도 업종 기준 추정값이다. 없는 것을 지어내는 대신,
+	 * 그것들이 어디에 있는지 알려주고 한 번에 건너가게 한다. */
+	$ds_more = ds_naver_map_url($place['name'], $place['address'] ?: $place['road_address']);
+	?>
+	<div class="panel more-naver">
+		<h2>메뉴 · 사진 · 영업시간</h2>
+		<p>
+			네이버 지역검색 API 는 가게 이름 · 업종 · 주소 · 전화번호 · 좌표까지만 줍니다.
+			<b>메뉴와 사진, 영업시간, 리뷰는 네이버 지도에서</b> 보실 수 있습니다.
+		</p>
+		<div class="more-actions">
+			<a class="btn btn-ember" target="_blank" rel="noopener" href="<?= h($ds_more) ?>">
+				네이버 지도에서 <?= h($place['name']) ?> 보기
+			</a>
+		</div>
 	</div>
 
 	<div style="margin:22px 0 60px">
