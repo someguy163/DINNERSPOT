@@ -9,10 +9,18 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      # 서버의 deploy.php 가 GitHub 에서 zip 을 받아 푼다. 여기서는 그걸 한 번 부르기만 한다.
-      # 응답에 성공 문구가 없으면 실패로 끝낸다 — InfinityFree 무료 등급은 봇 차단이 있어
-      # curl 에 JS 챌린지 페이지를 돌려줄 수 있고, 그러면 배포가 안 됐는데 초록으로 보인다.
-      # ponytail: 챌린지에 걸리면 수동 배포(브라우저로 deploy.php 열기)로 돌아간다.
+      # 서버의 deploy.php 가 GitHub zip 을 받아 푼다. 여기서는 한 번 부르기만 한다.
+      #
+      # -A 로 브라우저 User-Agent 를 보낸다. InfinityFree 무료 등급은 curl 기본
+      # UA 로 오는 요청을 그냥 끊어버린다(실측: exit 52, empty reply).
+      # -f 는 쓰지 않는다 — 실패했을 때 응답 본문을 봐야 원인을 안다.
+      # ponytail: 그래도 막히면 수동 배포(브라우저로 deploy.php 열기)로 돌아간다.
       - run: |
-          curl -fsS --max-time 180 "${{ secrets.DEPLOY_URL }}" -o out.html
-          grep -q '배포되었습니다' out.html || { echo '--- 응답 ---'; head -c 2000 out.html; exit 1; }
+          curl -sS --max-time 180 -L \
+            -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36' \
+            -w 'HTTP %{http_code}\n' \
+            "${{ secrets.DEPLOY_URL }}" -o out.html
+          echo '--- 응답 앞부분 ---'
+          head -c 2000 out.html
+          echo
+          grep -q '배포되었습니다' out.html
