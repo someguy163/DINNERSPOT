@@ -302,6 +302,9 @@ foreach ($meta['categories'] as $cat)
 						<?php endif; ?>
 						<span class="sep">·</span>
 						<a href="<?= h($r['map_url']) ?>" target="_blank" rel="noopener">지도에서 보기</a>
+						<span class="sep">·</span>
+						<a href="<?= h(ds_naver_route_url($r['lat'], $r['lng'], $r['name'])) ?>"
+						   target="_blank" rel="noopener">길찾기</a>
 					</p>
 				</div>
 

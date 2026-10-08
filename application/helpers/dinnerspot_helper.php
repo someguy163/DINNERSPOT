@@ -154,6 +154,34 @@ if ( ! function_exists('ds_locality_hint'))
 	}
 }
 
+if ( ! function_exists('ds_naver_route_url'))
+{
+	/**
+	 * 네이버 지도 길찾기 링크. 좌표가 있으면 그 지점으로 바로 보낸다.
+	 *
+	 * 출발지는 비워 둔다(-). 결과 화면은 고른 역을 알지만 상세 화면은 모르고,
+	 * 어차피 네이버가 현재 위치나 최근 출발지를 채워 준다. 양쪽을 같게 둔다.
+	 * 대중교통(transit)이 기본이다 — 역 근처를 고르는 앱이라 자동차보다 맞다.
+	 *
+	 * 쉼표는 경로 구분자라 인코딩하지 않는다. 이름만 인코딩한다.
+	 */
+	function ds_naver_route_url($lat, $lng, $name)
+	{
+		$lat = (float) $lat;
+		$lng = (float) $lng;
+
+		// 좌표가 없으면 길찾기를 걸 수 없다 — 이름으로 찾는 쪽으로 보낸다
+		if ($lat === 0.0 OR $lng === 0.0)
+		{
+			return ds_naver_map_url($name);
+		}
+
+		return 'https://map.naver.com/p/directions/-/'
+			. $lng . ',' . $lat . ',' . rawurlencode(ds_strip_naver_tag($name))
+			. '/-/transit';
+	}
+}
+
 if ( ! function_exists('ds_link_label'))
 {
 	/**

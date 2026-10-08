@@ -123,6 +123,8 @@ $has_geo = ( ! empty($place['lat']) && ! empty($place['lng']));
 			<a class="btn btn-ember" target="_blank" rel="noopener" href="<?= h($ds_more) ?>">
 				네이버 지도에서 <?= h($place['name']) ?> 보기
 			</a>
+			<a class="btn btn-ghost" target="_blank" rel="noopener"
+			   href="<?= h(ds_naver_route_url($place['lat'], $place['lng'], $place['name'])) ?>">길찾기</a>
 		</div>
 	</div>
 
