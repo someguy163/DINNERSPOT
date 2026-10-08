@@ -367,4 +367,33 @@
 			this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
 		});
 	}
+
+	/* ---------- 페이지 이동 로딩바 ----------
+	   지역 첫 조회는 네이버 호출 8회로 8초쯤 걸린다. 그동안 화면이 그대로라
+	   눌렸는지 알 수 없어 사람들이 다시 누른다. 위에 띠를 띄워 진행 중임을 알린다.
+
+	   submit 과 링크 클릭만 본다. 새 탭·다운로드·바깥 주소는 이 페이지가
+	   그대로 남으므로 띄우면 영영 안 사라진다. */
+	(function () {
+		var root = document.documentElement;
+
+		function start() { root.classList.add('is-loading'); }
+
+		document.addEventListener('submit', start, true);
+
+		document.addEventListener('click', function (e) {
+			var a = e.target.closest ? e.target.closest('a') : null;
+
+			if (!a || !a.href) { return; }
+			if (a.target === '_blank' || a.hasAttribute('download')) { return; }
+			if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) { return; }
+			if (a.origin !== location.origin) { return; }
+			if (a.getAttribute('href').charAt(0) === '#') { return; }
+
+			start();
+		}, true);
+
+		// 뒤로 가기로 돌아오면 캐시된 화면이라 띠가 남아 있다
+		window.addEventListener('pageshow', function () { root.classList.remove('is-loading'); });
+	}());
 }());

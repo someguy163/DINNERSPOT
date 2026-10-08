@@ -18,6 +18,7 @@
 <script defer src="<?= ds_asset('js/select-search.js') ?>"></script>
 </head>
 <body class="<?= h($body_class) ?>">
+<div id="pageload"></div>
 
 <header class="signboard">
 	<div class="wrap">
