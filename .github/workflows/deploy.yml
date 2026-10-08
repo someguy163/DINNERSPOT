@@ -11,16 +11,29 @@ jobs:
     steps:
       # 서버의 deploy.php 가 GitHub zip 을 받아 푼다. 여기서는 한 번 부르기만 한다.
       #
-      # -A 로 브라우저 User-Agent 를 보낸다. InfinityFree 무료 등급은 curl 기본
-      # UA 로 오는 요청을 그냥 끊어버린다(실측: exit 52, empty reply).
-      # -f 는 쓰지 않는다 — 실패했을 때 응답 본문을 봐야 원인을 안다.
-      # ponytail: 그래도 막히면 수동 배포(브라우저로 deploy.php 열기)로 돌아간다.
-      - run: |
-          curl -sS --max-time 180 -L \
-            -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36' \
-            -w 'HTTP %{http_code}\n' \
-            "${{ secrets.DEPLOY_URL }}" -o out.html
+      # InfinityFree 무료 등급은 브라우저가 아닌 요청에 자바스크립트 챌린지를 돌려준다:
+      #   a,b,c = toNumbers(...) 세 개의 16진수
+      #   __test 쿠키 = toHex(slowAES.decrypt(c, 2, a, b))   // 2 = CBC
+      # AES-128-CBC 복호화 한 번이면 되는 값이라 openssl 로 풀고 다시 요청한다.
+      # ponytail: 챌린지 형식이 바뀌면 여기서 깨진다. 그때는 브라우저로 deploy.php 를 연다.
+      - name: deploy
+        run: |
+          set -euo pipefail
+          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'
+          URL='${{ secrets.DEPLOY_URL }}'
+
+          curl -sS --max-time 180 -A "$UA" "$URL" -o out.html
+
+          if grep -q 'toNumbers' out.html; then
+            echo '봇 차단 챌린지 — __test 쿠키를 만들어 다시 요청합니다'
+            mapfile -t V < <(grep -oP 'toNumbers\("\K[0-9a-f]+' out.html)
+            TEST=$(printf %s "${V[2]}" | xxd -r -p \
+                   | openssl enc -d -aes-128-cbc -K "${V[0]}" -iv "${V[1]}" -nopad \
+                   | xxd -p | tr -d '\n')
+            curl -sS --max-time 180 -A "$UA" -b "__test=$TEST" "$URL" -o out.html
+          fi
+
           echo '--- 응답 앞부분 ---'
-          head -c 2000 out.html
+          head -c 1500 out.html
           echo
           grep -q '배포되었습니다' out.html
