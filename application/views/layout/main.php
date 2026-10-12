@@ -7,6 +7,11 @@
 <meta name="description" content="<?= h($desc) ?>">
 <meta name="theme-color" content="#1A1512">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🍖</text></svg>">
+<?php
+// 스타일시트보다 **먼저** 돌아야 한다. 늦으면 밝은 화면이 한 번 번쩍인다.
+// 저장된 선택이 없으면 아무것도 하지 않고 OS 설정(prefers-color-scheme)에 맡긴다.
+?>
+<script>try{var t=localStorage.getItem('ds-theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 <link rel="stylesheet" href="<?= ds_asset('css/app.css') ?>">
 <script>window.DS_BASE = <?= json_encode(base_url()) ?>;</script>
 <!-- defer: head 에서 먼저 예약되어 본문의 페이지 스크립트보다 항상 먼저 실행된다 -->
@@ -33,6 +38,8 @@
 			<?php if ( ! empty($admin_enabled)): ?>
 				<a href="<?= base_url('admin') ?>" class="nav-admin <?= $nav === 'admin' ? 'on' : '' ?>">관리자</a>
 			<?php endif; ?>
+			<button type="button" id="theme-toggle" class="nav-theme"
+			        aria-label="밝게/어둡게 전환" title="밝게/어둡게 전환">🌗</button>
 		</nav>
 	</div>
 </header>

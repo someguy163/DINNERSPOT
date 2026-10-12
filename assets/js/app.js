@@ -396,4 +396,25 @@
 		// 뒤로 가기로 돌아오면 캐시된 화면이라 띠가 남아 있다
 		window.addEventListener('pageshow', function () { root.classList.remove('is-loading'); });
 	}());
+
+	/* ---------- 밝게 / 어둡게 ----------
+	   기본은 OS 설정(prefers-color-scheme)을 따른다. 버튼을 누른 순간부터만
+	   data-theme 로 고정하고 localStorage 에 남긴다. <head> 의 인라인 스크립트가
+	   스타일시트보다 먼저 그 값을 입혀서 화면이 번쩍이지 않는다. */
+	(function () {
+		var btn = document.getElementById('theme-toggle');
+
+		if (!btn) { return; }
+
+		btn.addEventListener('click', function () {
+			var root = document.documentElement;
+			var dark = root.dataset.theme
+				? root.dataset.theme === 'dark'
+				: window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+			root.dataset.theme = dark ? 'light' : 'dark';
+
+			try { localStorage.setItem('ds-theme', root.dataset.theme); } catch (e) {}
+		});
+	}());
 }());

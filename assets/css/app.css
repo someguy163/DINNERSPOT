@@ -20,6 +20,10 @@
 	--muted-2:   #78716A;   /* 흰 배경 대비 4.8:1 — 보조 텍스트 최소선 */
 	--danger:    #C2321F;
 
+	/* 간판 · 담은목록 · 어두운 버튼처럼 **두 모드 모두 어두운** 면.
+	   --char 는 글자/테두리색이라 다크모드에서 밝아지지만 이건 그대로 둔다. */
+	--band:      #1A1512;
+
 	--r-sm: 4px;
 	--r:    8px;
 	--r-lg: 14px;
@@ -32,6 +36,60 @@
 	--font: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
 	        "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
 }
+
+/* ---------- 다크 모드 ----------
+   토큰만 바꾼다. 어두운 배경(--band)과 그 위 글자(#F2EDE6 등)는 원래 어두운
+   면이라 건드리지 않는다. 바뀌는 것은 종이·카드·테두리·글자색뿐이다.
+
+   OS 설정을 따르되(:root:not([data-theme="light"])), 사람이 고르면 그게 이긴다. */
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) {
+		--char:      #F0ECE5;
+		--char-soft: #D6D0C7;
+		--paper:     #15110E;
+		--surface:   #1E1915;
+		--steel:     #352D25;
+		--steel-2:   #262019;
+		--muted:     #9C9289;
+		--muted-2:   #A79C92;
+		--ember:     #FF7A45;
+		--ember-dim: #FF5A1F;
+		--soju:      #5FBE97;
+		--soju-dim:  #2E8B6B;
+		--danger:    #F08A76;
+	}
+}
+
+:root[data-theme="dark"] {
+	--char:      #F0ECE5;
+	--char-soft: #D6D0C7;
+	--paper:     #15110E;
+	--surface:   #1E1915;
+	--steel:     #352D25;
+	--steel-2:   #262019;
+	--muted:     #9C9289;
+	--muted-2:   #A79C92;
+	--ember:     #FF7A45;
+	--ember-dim: #FF5A1F;
+	--soju:      #5FBE97;
+	--soju-dim:  #2E8B6B;
+	--danger:    #F08A76;
+}
+
+/* 다크에서 흰색 고정이던 면들 */
+:root[data-theme="dark"] .dsel-panel { background: var(--surface); }
+
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) .dsel-panel { background: var(--surface); }
+	:root:not([data-theme="light"]) .dsel-btn:hover,
+	:root:not([data-theme="light"]) .blank input:hover,
+	:root:not([data-theme="light"]) .blank select:hover { background: var(--steel); }
+}
+
+:root[data-theme="dark"] .dsel-btn:hover,
+:root[data-theme="dark"] .blank input:hover,
+:root[data-theme="dark"] .blank select:hover { background: var(--steel); }
+
 
 * { box-sizing: border-box; }
 
@@ -74,7 +132,7 @@ pre code { overflow-wrap: normal; }
    간판 — 어두운 밴드
    --------------------------------------------------------- */
 .signboard {
-	background: var(--char);
+	background: var(--band);
 	color: #F2EDE6;
 	border-bottom: 3px solid var(--ember);
 }
@@ -122,7 +180,21 @@ pre code { overflow-wrap: normal; }
 }
 
 .signboard nav a:hover { color: #fff; background: rgba(255, 255, 255, .09); }
-.signboard nav a.on    { color: var(--char); background: #F2EDE6; }
+
+/* 테마 전환 버튼. 간판은 두 모드 모두 어두우므로 글자는 항상 밝게 둔다. */
+.nav-theme {
+	background: transparent;
+	border: 0;
+	padding: 6px 8px;
+	margin-left: 2px;
+	font-size: 17px;
+	line-height: 1;
+	cursor: pointer;
+	border-radius: var(--r-sm);
+	color: #F2EDE6;
+}
+.nav-theme:hover { background: rgba(255, 255, 255, .09); }
+.signboard nav a.on    { color: var(--band); background: #F2EDE6; }
 
 /* 관리자 메뉴 - 내부용이라는 걸 눈으로 구분한다.
    admin_password 가 설정된 경우에만 렌더된다(MY_Controller::render). */
@@ -132,7 +204,7 @@ pre code { overflow-wrap: normal; }
 }
 
 .signboard nav a.nav-admin:hover { color: #fff; border-color: rgba(255, 255, 255, .45); }
-.signboard nav a.nav-admin.on    { color: var(--char); background: #F2EDE6; border-color: transparent; }
+.signboard nav a.nav-admin.on    { color: var(--band); background: #F2EDE6; border-color: transparent; }
 
 /* ---------------------------------------------------------
    문장형 폼 — 이 서비스의 얼굴
@@ -451,7 +523,7 @@ select.dsel-native {
 .chip input { position: absolute; opacity: 0; width: 0; height: 0; }
 
 .chip:has(input:checked) {
-	background: var(--char);
+	background: var(--band);
 	border-color: var(--char);
 	color: #fff;
 }
@@ -462,7 +534,7 @@ select.dsel-native {
    JS 가 인라인 style 로 칠하던 것을 클래스로 옮겼다 — 인라인은
    해제할 때 되돌리기 어려워 버튼이 켜진 채로 남았다. */
 .chip.on {
-	background: var(--char);
+	background: var(--band);
 	border-color: var(--char);
 	color: #fff;
 }
@@ -654,7 +726,7 @@ a.pg:hover {
 }
 
 .pg.on {
-	background: var(--char);
+	background: var(--band);
 	border-color: var(--char);
 	color: #fff;
 }
@@ -936,7 +1008,7 @@ a.pg:hover {
 .gauge-fill {
 	display: block;   /* span 이라 inline 이면 width/height 가 무시된다 */
 	height: 100%;
-	background: var(--char);
+	background: var(--band);
 	border-radius: 999px;
 	width: 0;
 	transition: width .7s cubic-bezier(.2, .8, .3, 1);
@@ -981,7 +1053,7 @@ a.pg:hover {
 	left: 0;
 	right: 0;
 	bottom: 0;
-	background: var(--char);
+	background: var(--band);
 	color: #F2EDE6;
 	transform: translateY(110%);
 	transition: transform .22s cubic-bezier(.2, .8, .3, 1);
@@ -1052,7 +1124,7 @@ a.pg:hover {
    투표
    --------------------------------------------------------- */
 .vote-head {
-	background: var(--char);
+	background: var(--band);
 	color: #F2EDE6;
 	padding: 34px 0 30px;
 }
@@ -1220,7 +1292,7 @@ a.pg:hover {
 	left: 50%;
 	bottom: 28px;
 	transform: translate(-50%, 20px);
-	background: var(--char);
+	background: var(--band);
 	color: #fff;
 	padding: 12px 20px;
 	border-radius: var(--r);
@@ -1649,7 +1721,7 @@ a.pg:hover {
 	display: block;   /* span 이라 inline 이면 width/height 가 무시된다 */
 	height: 100%;
 	width: 0;
-	background: var(--char);
+	background: var(--band);
 	border-radius: 999px;
 }
 
