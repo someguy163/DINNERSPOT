@@ -127,6 +127,10 @@ foreach ($meta['categories'] as $cat)
 						<?= $r >= 1000 ? (($r / 1000) . 'km') : ($r . 'm') ?>
 					</label>
 				<?php endforeach; ?>
+				<label class="chip">
+					<input type="checkbox" name="wide" value="1" <?= ! empty($c['wide']) ? 'checked' : '' ?>>
+					🔍 넓게 찾기
+				</label>
 			</dd>
 		</dl>
 

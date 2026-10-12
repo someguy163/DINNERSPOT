@@ -74,7 +74,12 @@ class Spot_service {
 		if ($enabled && $this->should_fetch($c, $origin))
 		{
 			$queries = $this->build_queries($c, $origin);
-			$rows    = $this->CI->naver_local->search_many($queries);
+			// 넓게 찾기: 업종 풀을 끝까지 던진다. 호출당 5건이라 질의를 늘리는 것이
+			// 유일한 방법이고, 그만큼 느려진다(질의 하나에 서버에서 약 1초).
+			$rows    = $this->CI->naver_local->search_many(
+				$queries,
+				empty($c['wide']) ? NULL : count($queries)
+			);
 
 			$naver['used']  = TRUE;
 			$naver['calls'] = $this->CI->naver_local->call_count();
@@ -510,6 +515,18 @@ class Spot_service {
 			'중국집', '치킨', '횟집', '분식', '국밥', '술집', '일식', '양식',
 			'카페', '삼겹살', '고기집', '뷔페', '곱창',
 		));
+
+		/* 넓게 찾기면 풀을 더 붙인다. 기본 풀에 없는 업종은 질의가 안 나가서
+		 * 아무리 호출을 늘려도 안 잡힌다 — 실측: '서담솥밥&화로' 는
+		 * "가산디지털단지역 솥밥" 질의에만 나오는데 '솥밥' 이 풀에 없었다.
+		 * 그래도 '전체' 는 아니다. 호출당 5건이라 어떤 단어를 넣어도 빠지는 집은 나온다. */
+		if ( ! empty($c['wide']))
+		{
+			$pool = array_merge((array) $pool, $this->cfg('naver_query_pool_wide', array(
+				'한식', '솥밥', '백반', '국수', '보쌈', '족발', '양꼬치',
+				'파스타', '피자', '쌈밥', '닭갈비', '막창', '해물', '덮밥',
+			)));
+		}
 
 		foreach ((array) $pool as $kw)
 		{

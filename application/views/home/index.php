@@ -49,6 +49,11 @@ foreach ($meta['purposes'] as $p)
 			</div>
 
 			<p style="margin:14px 0 0;color:var(--muted-2);font-size:14px;font-weight:500;line-height:1.65">
+				<b>🔍 넓게 찾기</b>를 켜면 업종별로 질의를 더 던져 후보가 늘어납니다 —
+				대신 처음 보는 지역은 10초 넘게 걸립니다. 네이버가 질의 하나에 5곳만
+				주기 때문에 질의 수를 늘리는 것 말고는 방법이 없습니다.
+			</p>
+			<p style="margin:10px 0 0;color:var(--muted-2);font-size:14px;font-weight:500;line-height:1.65">
 				<b>조건을 빼고 전체에서 찾을 수도 있습니다.</b>
 				인원에 <b>0</b>, 예산은 <b>얼마든</b>, 목적은 <b>무엇이든</b> 을 고르면
 				그 조건은 점수 계산에서 아예 빠집니다 — 나머지 조건만으로 순위를 냅니다.
@@ -90,6 +95,10 @@ foreach ($meta['purposes'] as $p)
 							<?= $r >= 1000 ? (($r / 1000) . 'km') : ($r . 'm') ?>
 						</label>
 					<?php endforeach; ?>
+					<label class="chip">
+						<input type="checkbox" name="wide" value="1" >
+						🔍 넓게 찾기
+					</label>
 					<button type="button" class="chip" id="btn-geo">📍 내 위치 기준</button>
 					<?php if ($meta['map_key'] !== ''): ?>
 						<button type="button" class="chip" id="f-btn-map"

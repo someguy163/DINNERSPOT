@@ -382,7 +382,7 @@ if ( ! function_exists('ds_criteria_params'))
 			$q['categories'] = $c['categories'];
 		}
 
-		foreach (array('need_room', 'need_parking', 'need_late', 'no_alcohol', 'strict') as $flag)
+		foreach (array('need_room', 'need_parking', 'need_late', 'no_alcohol', 'strict', 'wide') as $flag)
 		{
 			if ( ! empty($c[$flag]))
 			{

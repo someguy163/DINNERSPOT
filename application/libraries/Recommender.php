@@ -181,6 +181,8 @@ class Recommender {
 			'need_late'    => ! empty($input['need_late']),
 			'no_alcohol'   => ! empty($input['no_alcohol']),
 			'strict'       => ! empty($input['strict']),
+			// 업종 풀을 끝까지 던진다. 호출이 늘어 느려지는 대신 더 많이 모은다.
+			'wide'         => ! empty($input['wide']),
 			// 후보 출처 강제 지정. 비어 있으면 Spot_service 가 config 로 결정한다.
 			// naver / db / both 비교용으로 쿼리스트링에 붙일 수 있다.
 			'source_mode'  => (string) $in('source_mode', ''),
