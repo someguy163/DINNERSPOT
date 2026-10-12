@@ -44,14 +44,14 @@
    OS 설정을 따르되(:root:not([data-theme="light"])), 사람이 고르면 그게 이긴다. */
 @media (prefers-color-scheme: dark) {
 	:root:not([data-theme="light"]) {
-		--char:      #F0ECE5;
-		--char-soft: #D6D0C7;
-		--paper:     #15110E;
-		--surface:   #1E1915;
-		--steel:     #352D25;
-		--steel-2:   #262019;
-		--muted:     #9C9289;
-		--muted-2:   #A79C92;
+		--char:      #ECECEA;
+		--char-soft: #CBCBC8;
+		--paper:     #141414;
+		--surface:   #1C1C1C;
+		--steel:     #303030;
+		--steel-2:   #242424;
+		--muted:     #949492;
+		--muted-2:   #A6A6A3;
 		--ember:     #FF7A45;
 		--ember-dim: #FF5A1F;
 		--soju:      #5FBE97;
@@ -61,14 +61,14 @@
 }
 
 :root[data-theme="dark"] {
-	--char:      #F0ECE5;
-	--char-soft: #D6D0C7;
-	--paper:     #15110E;
-	--surface:   #1E1915;
-	--steel:     #352D25;
-	--steel-2:   #262019;
-	--muted:     #9C9289;
-	--muted-2:   #A79C92;
+	--char:      #ECECEA;
+	--char-soft: #CBCBC8;
+	--paper:     #141414;
+	--surface:   #1C1C1C;
+	--steel:     #303030;
+	--steel-2:   #242424;
+	--muted:     #949492;
+	--muted-2:   #A6A6A3;
 	--ember:     #FF7A45;
 	--ember-dim: #FF5A1F;
 	--soju:      #5FBE97;
